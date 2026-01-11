@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sbe:messageSchema xmlns:sbe="http://fixprotocol.io/2016/sbe"
+    package="sbe4kt"
+    id="1"
+    version="0"
+    semanticVersion="5.2"
+    description="Consolidated SBE Schema"
+    byteOrder="littleEndian">
+    <types>
+        <composite name="messageHeader" description="Message identifiers and length of message root">
+            <type name="blockLength" primitiveType="uint16"/>
+            <type name="templateId"  primitiveType="uint16"/>
+            <type name="schemaId"    primitiveType="uint16"/>
+            <type name="version"     primitiveType="uint16"/>
+        </composite>
+    </types>
+
+    <sbe:message name="ImplicitIdMessage" id="1" description="ImplicitIdMessage">
+        <field name="price" id="1" type="double"/>
+        <field name="quantity" id="2" type="int32"/>
+    </sbe:message>
+   
+
+    <sbe:message name="ExplicitIdMessage" id="2" description="ExplicitIdMessage">
+        <field name="fieldA" id="1" type="int64" offset="0"/>
+        <field name="fieldB" id="2" type="int32" offset="8"/>
+    </sbe:message>
+   
+
+    <sbe:message name="ImplicitIdMessage2" id="3" description="ImplicitIdMessage2">
+        <field name="price" id="1" type="double"/>
+        <field name="quantity" id="2" type="int32"/>
+    </sbe:message>
+   
+
+    <sbe:message name="ImplicitIdMessage4" id="4" description="ImplicitIdMessage4">
+        <field name="price" id="1" type="double"/>
+        <field name="quantity" id="2" type="int32"/>
+    </sbe:message>
+   
+</sbe:messageSchema>
