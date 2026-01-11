@@ -1,0 +1,21 @@
+
+# Gradle
+.gradle
+build/
+
+# Kotlin
+.kotlin
+
+# IDEA
+.idea
+*.iml
+
+# Local JDK
+jdk-*/
+jdk*.tar.gz
+
+# Mac
+.DS_Store
+
+# Generated
+sbe4kt/build/
