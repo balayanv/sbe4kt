@@ -8,6 +8,7 @@ typealias Row = ArrayList<Value>
 typealias Rows = ArrayList<Row>
 
 class CSV(
+   var info: String = "",
    val header: Headers = ArrayList(),
    val rows: Rows = ArrayList(),
 ) {
@@ -34,13 +35,43 @@ class CSV(
          max + 2 // Add some padding
       }
 
-      // Print top border
-      print("┌")
-      columnWidths.forEachIndexed { index, width ->
-         print("─".repeat(width))
-         if (index < columnWidths.size - 1) print("┬") else print("┐")
+      // Print info string as one big row before header if present
+      if (info.isNotEmpty()) {
+         val totalWidth = columnWidths.sum() + (columnWidths.size - 1) // Total width including separators
+
+         // Print info top border
+         print("┌")
+         print("─".repeat(totalWidth))
+         print("┐")
+         println()
+
+         // Print info row
+         print("│")
+         val infoMaxWidth = totalWidth - 2 // Account for padding
+         val infoPadding = maxOf(0, totalWidth - info.length - 2)
+         print(" ")
+         print(info.take(infoMaxWidth)) // Truncate if too long
+         print(" ".repeat(infoPadding))
+         print(" ")
+         print("│")
+         println()
+
+         // Print info separator
+         print("├")
+         columnWidths.forEachIndexed { index, width ->
+            print("─".repeat(width))
+            if (index < columnWidths.size - 1) print("┬") else print("┤")
+         }
+         println()
+      } else {
+         // Print top border without info
+         print("┌")
+         columnWidths.forEachIndexed { index, width ->
+            print("─".repeat(width))
+            if (index < columnWidths.size - 1) print("┬") else print("┐")
+         }
+         println()
       }
-      println()
 
       // Print header
       print("│")
@@ -80,16 +111,8 @@ class CSV(
       }
       println()
    }
-}
 
-
-fun main() {
-   CSV()
-      .addHeader("header1")
-      .addHeader("header2")
-      .addHeader("header3")
-      .addRow("value1", "value2", "value3")
-      .addRow("value4", "value5", "value6")
-      .print()
-
+   fun info(info: String) = apply {
+      this.info = info
+   }
 }

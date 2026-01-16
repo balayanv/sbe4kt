@@ -20,4 +20,8 @@ private val reserved = setOf(
    "float", "float64"
 )
 
-internal fun getSbeFieldName(name: String) = if (reserved.contains(name)) "${name}Value" else name
+internal fun String.validateNotReservedWord() = apply{
+   if (reserved.contains(this)) {
+      throw IllegalStateException("do not use reserve words as property names : $this")
+   }
+}

@@ -6,6 +6,11 @@ To use it you need to annotate a data class with `@SBE` annotation.
 
 
 
+TODO : debugger no longer works
+TODO : fix encode/decode statement into 4 smaller methods
+TODO : fix MSG -> composite -> ValueClass complex uses
+
+
 There are some conventions and defaults that you should be aware of, most of these are optional, but they are made defaults for a reason (do not expect good performance if you choose to deviate).
 
 * All fields of your class must be mutable.
@@ -25,3 +30,25 @@ There are some conventions and defaults that you should be aware of, most of the
   * If you want to enforce padding you can use `@SBE(usePadding=true)`.
 
 * All encode/decode generated methods give you opportunity to reuse buffers and instances.
+
+* All generated code is for kotlin, but if you need it to be java friendly use `SBE(javaFriendly=true)`
+  * Java does not have cutting edge software innovations such as default arguments, type inference
+  * Such methods are achieved trough overloading a methods with default arguments, which pollutes the namespace.
+
+
+## Contributing
+
+KSP api is very flexible, it is very likely that you may want to add some specific features for 
+your own projects or modify the existing ones. If you do something that is generic and will benefit the library
+please send a pull request.
+
+Few things to keep in mind. Stay in line with the principles mentioned above. Many of these choices are deliberate
+to discourage developers from misusing or building an unmaintainable mess.
+
+Generated code has no warnings or comments, keep it that way if you are going to contribute, 
+make the code self documenting, the method/field/variable names should be self explanatory, 
+using long names is ok.
+
+To debug the plugin while it is compiling your classes first invoke `ksp_debug_gradle` intellij configuration,
+this runs gradle in a mode where it expects a debugger to attach, then run `ksp_debug_idea` to actually attach a debugger.
+Now your breakpoints under `sbe4kt` module wont be ignored.
