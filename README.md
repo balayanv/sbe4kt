@@ -1,39 +1,52 @@
 # SBE4KT
 
-This is an attempt to solve all my serialization related problems. SBE4KT is a Kotlin Compiler Plugin with a simple goal to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs. It uses your kotlin data classes as reference, builds intermediate representation of what your schema looks like, generates `sbe-schema.xml` in your resources folders, compiles them via `sbetool`, then generates number of high level kotlin extensions to use the codecs.
+SBE4KT is a Kotlin Compiler Plugin with a simple goal to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs, it adds support for lots of features not available in SBE. 
+
+It uses your kotlin data classes as reference, builds intermediate representation of what your schema looks like, generates `sbe-schema.xml` in your resources folders, compiles them via `sbetool`, then generates number of high level kotlin extensions to use the codecs.
+
+
+## Getting started
 
 To use it you need to annotate a data class with `@SBE` annotation.
 
+TODO : demo all features here
 
-
-TODO : debugger no longer works
-TODO : fix encode/decode statement into 4 smaller methods
-TODO : fix MSG -> composite -> ValueClass complex uses
-
+## Recommendations, Conventions and Defaults
 
 There are some conventions and defaults that you should be aware of, most of these are optional, but they are made defaults for a reason (do not expect good performance if you choose to deviate).
 
-* All fields of your class must be mutable.
+* Always define your message ids in real systems (autogen ids are for convenience only).
+  * You can enforce it via `requireMessageIds`
 
-* All fields must be NOT nullable.
-  * SBE does not keep information if the field was set or not. 
-  * If you absolutely want nullability use `@SBE(allowNullableTypes=true)`.
+* All fields of your class MUST be mutable.
+  * Immutability is idiotic with very few exceptions.
+
+* All fields must be NOT nullable
+  * SBE does not keep information if the field was set or not
+  * If you absolutely want nullability use `allowNullableTypes=true`
+  * If you want to enforce non nulls use `requireNotNulls`
+  * If you have many nullable fields and/or booleans use `compactFlags`
 
 * All messages should be fixed sized. 
-  * There are many useful types that you can use to avoid variable length fields.
-  * If you need to use short strings try declaring custom charset and use `Str64`.
-  * You can also use fixed sizes with Strings and repeating groups by using `@Meta(size=42)`.
-  * If you absolutely want variable length fields use `@SBE(allowVarLengthFields=true)`.
+  * There are many useful types that you can use to avoid variable length fields
+    * `FPDeci` for fixed point arithmetic fitting in `int64`
+    * `TimeId` unique timestamps with least significant 2 digits used as tags
+    * `Str64` custom charset string that uses single `int64` and implements `CharSequence`
+    * fixed size strings (optionally with custom encodings)
+    * fixed size collections (list/map/set)
+  * If you absolutely want variable length fields use `allowVarLengthFields=true`
+  * If you want to enforce fixed size use `requireFixedLength`
 
-* All fields are sorted in descending order to have effective memory use.
-  * This means most 8 byte fields will naturally align. 
-  * If you want to enforce padding you can use `@SBE(usePadding=true)`.
+* All fields are sorted by size in descending order to have effective memory use
+  * This means most 8 byte fields will naturally align
+  * If you want to enforce padding you can use `usePadding=true`
+    * this also adds padding to the end of the message
 
-* All encode/decode generated methods give you opportunity to reuse buffers and instances.
+* All encode/decode generated methods give you opportunity to reuse buffers and instances
 
-* All generated code is for kotlin, but if you need it to be java friendly use `SBE(javaFriendly=true)`
+* All generated code is for kotlin foremost, but if you're still suffering with java use `javaFriendly=true`
   * Java does not have cutting edge software innovations such as default arguments, type inference
-  * Such methods are achieved trough overloading a methods with default arguments, which pollutes the namespace.
+  * Such methods are achieved trough overloading a methods with default arguments, which pollutes the namespace
 
 
 ## Contributing
@@ -46,9 +59,40 @@ Few things to keep in mind. Stay in line with the principles mentioned above. Ma
 to discourage developers from misusing or building an unmaintainable mess.
 
 Generated code has no warnings or comments, keep it that way if you are going to contribute, 
-make the code self documenting, the method/field/variable names should be self explanatory, 
+make the code self documenting, the method/field/variable names should be self-explanatory, 
 using long names is ok.
 
 To debug the plugin while it is compiling your classes first invoke `ksp_debug_gradle` intellij configuration,
-this runs gradle in a mode where it expects a debugger to attach, then run `ksp_debug_idea` to actually attach a debugger.
-Now your breakpoints under `sbe4kt` module wont be ignored.
+this runs Gradle in a mode where it expects a debugger to attach, then run `ksp_debug_idea` to actually attach a debugger.
+Now your breakpoints under `sbe4kt` module won't be ignored.
+
+## TODO (serialization layer)
+
+* rename the annotations (`@Metadata` is used in kotlin stdlib)
+* add support for `size=N` for fixed size string, array, map, set
+* add support for custom charset strings `str64`
+* add tests for special value classes `FPDeci`, `TimeId`
+* add support for fixed size custom charset str `StrN`
+* add support for Sealed classes (unions)
+* add demos for migration `version`, `since`
+* add support for nesting @SBE messages
+* add support for var length String/Blobs (disables flyweights)
+* add support for `compactFlags` nullability + boolean flags stored via bitset `sbe:set`
+* add support for `javaFriendly` 
+* publish `sbe4kt` artefact to mvn local 
+* add configuration options to `sbe4kt`
+  * support `requireMessageIds` (fails compilation if a message has no id)
+  * support `requireNotNulls` (cannot use `allowNullableTypes`)
+  * support `requireFixedLength` (cannot use `allowVarLengthFields`)
+
+## MISC TODO
+
+* Slab byte[] allocators for buffer reuse
+  * when you need many messages around instead of processing one at a time
+
+* Extensions over Aeron IPC/UDP for GRPC like bidirectional communication
+  * one to one (Req - Rep)
+  * one to many (Req - IObservable<Rep>)
+  * many to one (IObservable<Req> - Rep)
+  * many to many (IObservable<Req> - IObservable<Rep>)
+
