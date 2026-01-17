@@ -2,21 +2,23 @@ package sbe4kt
 
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Message(
+annotation class SBE(
     /**
      * The unique template ID for this message.
-     * If set to -1 (default), an ID will be automatically assigned starting from 1,
-     * skipping any explicitly defined IDs.
+     * SBE native attribute.
      */
     val id: Int = -1,
 
+    /**
+     * Version of the message.
+     * SBE native attribute.
+     */
     val version : Int = -1,
 
     /**
      * Adds offsets between fields to make sure each is at located at a multiple of 8 bytes,
-     * this is beneficial for speed but consumes more space on wire.
-     *
-     * usePadding and allowVarLengthFields cannot be true at the same time.
+     * Better for speed but consumes more space on wire.
+     * Cannot be used in conjunction with `allowVarLengthFields`.
      */
     val usePadding: Boolean = false,
 
@@ -24,36 +26,44 @@ annotation class Message(
      * Adds a bitset which tracks which fields were actually set.
      * Up to 64 such fields can exist per message.
      */
-    @Deprecated("This adds extra computation costs to each get/set and adds bitset to the fields")
     val allowNullableTypes : Boolean = false,
 
     /**
-     * Allows use of variable length fields. Impacts performance and functionality.
+     * Allows use of variable length fields.
+     * Cannot be used with `usePadding`.
+     * Will disable generation of flyweights for this type.
      */
-    @Deprecated("This badly impacts performance, creates many limitations on how you can use this message type")
     val allowVarLengthFields : Boolean = false,
 
     /**
-     * Uses a single bitset to track values of multiple boolean fields useful
-     * if you have many boolean fields (adds few extra instructions per get/set).
+     * Uses i64 bitset to keep track of nullability of fields and boolean flags.
      */
     val compactFlags : Boolean = false
 )
 
 @Target(AnnotationTarget.FIELD)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Metadata(
+annotation class META(
    /**
     * Specify your own id for given field in sbe schema.
+    * SBE native attribute.
     */
    val id: Int = -1,
 
+   /**
+    * Indicates since which version is this field available.
+    * SBE native attribute.
+    */
    val since : Int = -1,
 
+   /**
+    * Will use a composite type for this field.
+    * SBE native feature.
+    */
    val isComposite : Boolean = false,
 
    /**
-    * Allows to use fixed sized data structure for things like strings, and repeating groups.
+    * Indicates to use fixed size for given field if possible (string/array/list/map/set).
     */
    val size : Int = -1,
 )

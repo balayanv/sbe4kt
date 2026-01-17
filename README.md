@@ -68,7 +68,6 @@ Now your breakpoints under `sbe4kt` module won't be ignored.
 
 ## TODO (serialization layer)
 
-* rename the annotations (`@Metadata` is used in kotlin stdlib)
 * add support for `size=N` for fixed size string, array, map, set
 * add support for custom charset strings `str64`
 * add tests for special value classes `FPDeci`, `TimeId`

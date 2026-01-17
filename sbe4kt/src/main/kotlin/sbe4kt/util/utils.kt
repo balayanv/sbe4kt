@@ -39,4 +39,4 @@ internal fun KSClassDeclaration.requireMutableDataClass() {
    }
 }
 
-internal fun KSPropertyDeclaration.isComposite() = annotations.find { it.shortName.asString() == "Metadata" }?.arguments?.find { it.name?.asString() == "isComposite" }?.value as? Boolean ?: false
+internal fun KSPropertyDeclaration.isComposite() = annotations.find { it.shortName.asString() == "META" }?.arguments?.find { it.name?.asString() == "isComposite" }?.value as? Boolean ?: false

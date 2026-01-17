@@ -1,11 +1,11 @@
 package example
 
 import org.agrona.concurrent.UnsafeBuffer
-import sbe4kt.Message
-import sbe4kt.Metadata
+import sbe4kt.SBE
+import sbe4kt.META
 
 
-@Message
+@SBE
 data class Example(
 //    var f1: Boolean,
 //    var f2: Char,
@@ -17,7 +17,7 @@ data class Example(
 //    var f8: Double,
 //    var f9: EnumBool,
 //    var f10: ValueInt,
-    @Metadata(isComposite = true)
+    @META(isComposite = true)
     var position: XY,
 )
 

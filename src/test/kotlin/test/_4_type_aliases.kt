@@ -3,14 +3,14 @@ package test.type_aliases
 import org.agrona.concurrent.UnsafeBuffer
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import sbe4kt.Message
+import sbe4kt.SBE
 
 typealias CustomerId = Long
 typealias Amount = Double
 typealias TransactionId = Int
 typealias Timestamp = Long
 
-@Message
+@SBE
 data class TypeAliasMessage(
     var customerId: CustomerId,
     var amount: Amount,
@@ -19,7 +19,7 @@ data class TypeAliasMessage(
     var isValid: Boolean
 )
 
-@Message
+@SBE
 data class ComplexTypeAliasMessage(
     var primaryId: CustomerId,
     var secondaryId: CustomerId,

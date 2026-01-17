@@ -92,7 +92,7 @@ internal data class IrMessage(
 ) {
    val packageName: String = type.packageName.asString()
    val className: String = type.simpleName.asString()
-   val annotationArgs = type.annotations.find { it.shortName.asString() == "Message" }!!.arguments.validateSbeAnnotationValues()
+   val annotationArgs = type.annotations.find { it.shortName.asString() == "SBE" }!!.arguments.validateSbeAnnotationValues()
    var id: Int = annotationArgs.find { it.name?.asString() == "id" }?.value as? Int ?: -1
    val usePadding: Boolean = annotationArgs.find { it.name?.asString() == "usePadding" }?.value as? Boolean ?: false
 

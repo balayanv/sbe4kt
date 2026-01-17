@@ -3,9 +3,9 @@ package test.flyweights
 import org.agrona.concurrent.UnsafeBuffer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import sbe4kt.Message
+import sbe4kt.SBE
 
-@Message
+@SBE
 data class SimpleMessage(
    var intField: Int,
    var longField: Long,

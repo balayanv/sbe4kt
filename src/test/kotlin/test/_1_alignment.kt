@@ -3,9 +3,9 @@ package test.basics
 import org.agrona.concurrent.UnsafeBuffer
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import sbe4kt.Message
+import sbe4kt.SBE
 
-@Message
+@SBE
 data class BasicMessage(
     var intField: Int,
     var longField: Long,
@@ -16,7 +16,7 @@ data class BasicMessage(
     var byteField: Byte
 )
 
-@Message(
+@SBE(
    id = 500,
    usePadding = true
 )

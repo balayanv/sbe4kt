@@ -3,14 +3,14 @@ package test.enums
 import org.agrona.concurrent.UnsafeBuffer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import sbe4kt.Message
+import sbe4kt.SBE
 import test.enums.MessageWithEnums.Status
 
 enum class Color(val value: Int) {
    RED(0), GREEN(1), BLUE(2), YELLOW(3), PURPLE(4)
 }
 
-@Message
+@SBE
 data class MessageWithEnums(
    var color: Color,
    var status: Status,

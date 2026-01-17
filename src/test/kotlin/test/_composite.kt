@@ -3,16 +3,16 @@ package test.composite
 import org.agrona.concurrent.UnsafeBuffer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import sbe4kt.Message
-import sbe4kt.Metadata
+import sbe4kt.SBE
+import sbe4kt.META
 import test.enums.Color
 
 
-@Message
+@SBE
 data class Point(
    var color: Color,
 
-   @Metadata(isComposite = true)
+   @META(isComposite = true)
    var position : XY
 )
 
@@ -22,23 +22,23 @@ data class XY(
 )
 
 // More complex example with multiple composite fields
-@Message(id = 10)
+@SBE(id = 10)
 data class Rectangle(
-   @Metadata(isComposite = true)
+   @META(isComposite = true)
    var topLeft: XY,
 
-   @Metadata(isComposite = true)
+   @META(isComposite = true)
    var bottomRight: XY,
 
    var filled: Boolean
 )
 
 // Example with nested composite (composite containing another type)
-@Message(id = 11)
+@SBE(id = 11)
 data class ComplexMessage(
    var id: Long,
 
-   @Metadata(isComposite = true)
+   @META(isComposite = true)
    var coordinates: Coordinates3D,
 
    var timestamp: Long

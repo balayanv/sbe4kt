@@ -4,9 +4,9 @@ import org.agrona.concurrent.UnsafeBuffer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import sbe4kt.Message
+import sbe4kt.SBE
 
-@Message
+@SBE
 data class AllMessage(
    var f1: Boolean,
    var f2: Char,

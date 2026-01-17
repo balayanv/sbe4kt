@@ -12,7 +12,7 @@ internal fun buildIr(resolver: Resolver): IrSchema {
 
    val sourcePaths = HashSet<String>()
 
-   resolver.getSymbolsWithAnnotation("sbe4kt.Message")
+   resolver.getSymbolsWithAnnotation("sbe4kt.SBE")
       .filter { it is KSClassDeclaration && it.validate()  }
       .map { it as KSClassDeclaration }
       .sortedBy { it.qualifiedName?.asString() } // Sort for deterministic order

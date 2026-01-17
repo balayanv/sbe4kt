@@ -4,7 +4,7 @@ import org.agrona.concurrent.UnsafeBuffer
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import sbe4kt.Message
+import sbe4kt.SBE
 
 @JvmInline
 value class ValueBoolean(val value : Boolean)
@@ -29,7 +29,7 @@ enum class SomeEnum(val value: String) {
 @JvmInline
 value class ValueEnum(val value : SomeEnum)
 
-@Message
+@SBE
 data class ValueClassMessage(
    var f1: ValueBoolean,
    var f2: ValueChar,
