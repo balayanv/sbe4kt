@@ -9,7 +9,6 @@ import sbe4kt.util.requireMutableDataClass
 
 internal fun buildIr(resolver: Resolver): IrSchema {
    val ir = IrSchema()
-
    val sourcePaths = HashSet<String>()
 
    resolver.getSymbolsWithAnnotation("sbe4kt.SBE")

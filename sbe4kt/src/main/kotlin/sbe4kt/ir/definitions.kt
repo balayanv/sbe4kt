@@ -1,6 +1,7 @@
 package sbe4kt.ir
 
 import com.google.devtools.ksp.symbol.*
+import sbe4kt.ir.IR.Composite.CompositeField
 import sbe4kt.util.*
 
 
@@ -27,79 +28,44 @@ internal data class IrSchema(
    }
 
    fun prepare() {
-      // todo we need to be able to handle nesting, using one annotated type from another, recursively processing them
-      // some sort of graph needs to be composed which finds out which types depend on which (if any)
-      // and start processing types that are not depending on others
       types.sortBy { it.id }
-
-      // Compute offsets and block length for each type
-      types.forEach { type ->
-         if (type.usePadding) {
-            computePaddedOffsets(type)
-         } else {
-            computePackedOffsets(type)
-         }
-      }
-   }
-
-   private fun computePaddedOffsets(type: IrMessage) {
-      var currentOffset = 0
-
-      // Sort fields by size (descending) for better alignment
-      val sortedFields = type.fields.sortedByDescending { it.type.size }
-
-      sortedFields.forEachIndexed { index, field ->
-         // Align to 8-byte boundary if needed
-         val alignment = 8
-         val padding = (alignment - (currentOffset % alignment)) % alignment
-         if (padding > 0) {
-            currentOffset += padding
-         }
-
-         field.offset = currentOffset
-         field.sbeOrder = index + 1
-         currentOffset += field.type.size
-      }
-
-      // Ensure block length is multiple of 8
-      // If currentOffset is already a multiple of 8, we don't need padding
-      // Otherwise, add padding to reach the next multiple of 8
-      val remainder = currentOffset % 8
-      type.blockLength = if (remainder == 0) currentOffset else currentOffset + (8 - remainder)
-   }
-
-   private fun computePackedOffsets(type: IrMessage) {
-      var currentOffset = 0
-
-      // Sort fields by size (descending) for optimal packing
-      val sortedFields = type.fields.sortedByDescending { it.type.size }
-
-      sortedFields.forEachIndexed { index, field ->
-         field.offset = currentOffset
-         field.sbeOrder = index + 1
-         currentOffset += field.type.size
-      }
-
-      type.blockLength = currentOffset
+      types.forEach { it.prepare() }
    }
 }
 
-/**
- * Each IrType corresponds to an <sbe:message...
- */
 internal data class IrMessage(
    val type: KSClassDeclaration
 ) {
    val packageName: String = type.packageName.asString()
    val className: String = type.simpleName.asString()
-   val annotationArgs = type.annotations.find { it.shortName.asString() == "SBE" }!!.arguments.validateSbeAnnotationValues()
+   val annotationArgs = type.annotations.find { it.shortName.asString() == "SBE" }!!.arguments.validateSbeAnnotation()
    var id: Int = annotationArgs.find { it.name?.asString() == "id" }?.value as? Int ?: -1
    val usePadding: Boolean = annotationArgs.find { it.name?.asString() == "usePadding" }?.value as? Boolean ?: false
 
-   // Computed in prepare() - total block size must be multiple of 8 when usePadding is true
-   // This ensures next message in buffer starts at aligned position
    var blockLength: Int = -1
    val fields: List<IrField> = getIrFields()
+
+   fun prepare() {
+      var currentOffset = 0
+      val sortedFields = fields.sortedByDescending { it.type.size }
+
+      sortedFields.forEachIndexed { index, field ->
+         if (usePadding) {
+            val padding = (8 - (currentOffset % 8)) % 8
+            currentOffset += padding
+         }
+         field.offset = currentOffset
+         field.sbeOrder = index + 1
+         currentOffset += field.type.size
+      }
+
+      blockLength = if (usePadding) {
+         val remainder = currentOffset % 8
+         if (remainder == 0) currentOffset else currentOffset + (8 - remainder)
+      } else {
+         currentOffset
+      }
+   }
 
    private fun getIrFields(): List<IrField> {
       val fields = ArrayList<IrField>()
@@ -114,19 +80,7 @@ internal data class IrMessage(
    }
 }
 
-private fun List<KSValueArgument>.validateSbeAnnotationValues() = apply {
-   val usePadding = this.find { it.name?.asString() == "usePadding" }?.value as? Boolean ?: false
-   val allowVarLengthFields = this.find { it.name?.asString() == "allowVarLengthFields" }?.value as? Boolean ?: false
 
-   require(!(usePadding && allowVarLengthFields)) {
-      "usePadding and allowVarLengthFields cannot both be true. Padding requires fixed field positions which conflicts with variable length fields."
-   }
-}
-
-
-/**
- * Each IrField corresponds to a <field name=...
- */
 internal data class IrField(
    val prop: KSPropertyDeclaration,
    val declarationOrder: Int = 0,
@@ -153,7 +107,6 @@ internal data class IrField(
          whereToAdd.add(importStr)
       }
 
-      // For composite types, also add imports for their component types
       if (type is IR.Composite) {
          type.fields.forEach { compositeField ->
             val compPackageStr = compositeField.type.packageStr
@@ -173,10 +126,7 @@ internal data class IrField(
       val resolvedType = prop.type.resolve()
 
       if (prop.isComposite()) {
-         // Resolve as composite type
-
          val compositeDeclaration = resolvedType.declaration as KSClassDeclaration
-
          compositeDeclaration.requireMutableDataClass()
 
          val compositeFields = compositeDeclaration.getAllProperties().map { compProp ->
@@ -197,25 +147,40 @@ internal data class IrField(
 private fun resolveType(resolvedType: KSType, parentClassName: String? = null): IR {
    val declaration = resolvedType.declaration
 
-   // type alias
    if (declaration is KSTypeAlias) {
       return resolveType(declaration.type.resolve(), parentClassName)
    }
 
    if (declaration is KSClassDeclaration) {
-      // value class
       if (declaration.isValueClass()) {
          val underlyingType = resolveType(declaration.primaryConstructor!!.parameters.first().type.resolve(), parentClassName)
          return IR.ValueClass(declaration, underlyingType)
       }
 
-      // enums - check if it's a nested enum by looking at parent
       if (declaration.isEnum()) {
-         // Check if this enum is nested inside a class
          return IR.Enum(declaration)
       }
    }
 
    // primitive
-   return declaration.qualifiedName().toPrimitiveIrType()
+   return when (declaration.qualifiedName()) {
+      "kotlin.Boolean" -> IR.Boolean
+      "kotlin.Char" -> IR.Char
+      "kotlin.Byte" -> IR.Int8
+      "kotlin.Short" -> IR.Int16
+      "kotlin.Int" -> IR.Int32
+      "kotlin.Long" -> IR.Int64
+      "kotlin.Float" -> IR.Float
+      "kotlin.Double" -> IR.Double
+      else -> throw IllegalArgumentException("Unsupported type: ${declaration.qualifiedName()}")
+   }
+}
+
+private fun List<KSValueArgument>.validateSbeAnnotation() = apply {
+   val usePadding = this.find { it.name?.asString() == "usePadding" }?.value as? Boolean ?: false
+   val allowVarLengthFields = this.find { it.name?.asString() == "allowVarLengthFields" }?.value as? Boolean ?: false
+
+   require(!(usePadding && allowVarLengthFields)) {
+      "usePadding and allowVarLengthFields cannot both be true. Padding requires fixed field positions which conflicts with variable length fields."
+   }
 }

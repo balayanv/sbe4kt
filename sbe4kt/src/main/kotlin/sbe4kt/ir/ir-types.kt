@@ -143,6 +143,12 @@ internal sealed interface IR {
         val declaration: KSClassDeclaration,
         val fields: List<CompositeField>
     ) : IR {
+
+        data class CompositeField(
+            val name: String,
+            val type: IR
+        )
+
         override val sbeName = declaration.simpleName()
         override val name = declaration.simpleName()
         override val size = fields.sumOf { it.type.size }
@@ -182,24 +188,5 @@ internal sealed interface IR {
             }
             return "${name}($fieldDecodes)"
         }
-    }
-}
-
-internal data class CompositeField(
-    val name: String,
-    val type: IR
-)
-
-internal fun String.toPrimitiveIrType(): IR {
-    return when (this) {
-        "kotlin.Boolean" -> IR.Boolean
-        "kotlin.Char" -> IR.Char
-        "kotlin.Byte" -> IR.Int8
-        "kotlin.Short" -> IR.Int16
-        "kotlin.Int" -> IR.Int32
-        "kotlin.Long" -> IR.Int64
-        "kotlin.Float" -> IR.Float
-        "kotlin.Double" -> IR.Double
-        else -> throw IllegalArgumentException("Unsupported type: $this")
     }
 }
