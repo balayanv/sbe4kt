@@ -1,4 +1,4 @@
-package sbe4kt
+package sbe4kt.lib
 
 @JvmInline
 value class TimeId(val value: Long) {
@@ -13,7 +13,7 @@ value class TimeId(val value: Long) {
     fun nanos(): Long = value
 
     /** * Extracts the ID/Tag from the last 2 digits.
-     * Range: 0 to 99 
+     * Range: 0 to 99
      */
     fun tag(): Int = (value % 100).toInt() // Least significant 2 digits
 
@@ -22,17 +22,11 @@ value class TimeId(val value: Long) {
      */
     fun tag(newTag: Int): TimeId {
         require(newTag in 0..99) { "Tag must be between 0 and 99" }
-        // 1. Strip the old tag (e.g., 12345 -> 12300)
-        val base = (value / 100) * 100 
-        // 2. Add the new tag
+        val base = (value / 100) * 100
         return TimeId(base + newTag)
     }
-    
-    /**
-     * Helper to replace the underlying timestamp completely.
-     * Useful for chaining, e.g., time.set(newTime).tag(id)
-     */
-    fun set(newValue: Long): TimeId = TimeId(newValue)
+
+    fun nanos(newValue: Long): TimeId = TimeId(newValue).tag(tag())
 
     override fun toString(): String = value.toString()
 }
