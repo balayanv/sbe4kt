@@ -9,17 +9,17 @@ import sbe4kt.CodecStr64
 object ANU : CharSet64("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
 
 @JvmInline
-value class CompactString(val value: Long) : CharSequence {
+value class CompactString64(val value: Long) : CharSequence {
    companion object {
       val codec = CodecStr64(ANU)
 
       @JvmStatic
-      fun encode(charSequence: CharSequence): CompactString {
-         return CompactString(codec.encode(charSequence))
+      fun encode(charSequence: CharSequence): CompactString64 {
+         return CompactString64(codec.encode(charSequence))
       }
 
       @JvmStatic
-      fun from(charSequence: CharSequence): CompactString {
+      fun from(charSequence: CharSequence): CompactString64 {
          return encode(charSequence)
       }
    }
@@ -50,7 +50,7 @@ value class CompactString(val value: Long) : CharSequence {
 
 
 fun main() {
-   val str : CompactString = CompactString.from("XBT_123123USD")
+   val str : CompactString64 = CompactString64.from("XBT_123123USD")
    println("${str.value} : $str")
 
 }

@@ -139,6 +139,42 @@ internal sealed interface IR {
         override fun convertFromSbe(value: String) = "$name(${underlyingType.convertFromSbe(value)})"
     }
 
+    /**
+     * Fixed-size CharSequence type for encoding strings with a known maximum length.
+     * Uses US-ASCII encoding (1 byte per character).
+     *
+     * @param fixedSize The fixed size in bytes
+     * @param kotlinTypeName The original Kotlin type name (String or CharSequence)
+     */
+    data class FixedCharSeq(val fixedSize: Int, val kotlinTypeName: String = "String") : IR {
+        override val sbeName = "CharSeq$fixedSize"
+        override val name = kotlinTypeName  // Use original type for factory functions
+        override val defaultValue = "\"\""
+        override val randomValue = "generateRandomAscii($fixedSize)"
+        override val size = fixedSize
+        override val packageStr = ""
+
+        // SBE encoder has a built-in method that accepts CharSequence directly
+        override fun howToEncodeFromInstance(encoder: String, field: String, instance: String): String {
+            return "$encoder.$field($instance.$field)"
+        }
+
+        // SBE decoder has a built-in method that returns String directly
+        override fun howToDecodeIntoInstance(decoder: String, field: String, instance: String): String {
+            return "$instance.$field = $decoder.$field()"
+        }
+
+        // SBE encoder has a built-in method that accepts CharSequence directly
+        override fun howToEncodeFromField(encoder: String, field: String): String {
+            return "$encoder.$field($field)"
+        }
+
+        override fun howToDecodeFromField(decoder: String, field: String): String {
+            // This returns the flyweight view - handled specially in kt-generator
+            return "${field}View"
+        }
+    }
+
     data class Composite(
         val declaration: KSClassDeclaration,
         val fields: List<CompositeField>

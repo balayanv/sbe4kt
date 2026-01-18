@@ -124,6 +124,18 @@ internal data class IrField(
 
    private fun getFieldType(): IR {
       val resolvedType = prop.type.resolve()
+      val fieldSize = prop.metaSize()
+
+      // Handle String/CharSequence with @META(size = N)
+      if (fieldSize > 0) {
+         val typeName = resolvedType.declaration.qualifiedName()
+         if (typeName == "kotlin.String") {
+            return IR.FixedCharSeq(fieldSize, "String")
+         }
+         if (typeName == "kotlin.CharSequence") {
+            return IR.FixedCharSeq(fieldSize, "CharSequence")
+         }
+      }
 
       if (prop.isComposite()) {
          val compositeDeclaration = resolvedType.declaration as KSClassDeclaration

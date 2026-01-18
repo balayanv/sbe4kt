@@ -1,6 +1,7 @@
 package sbe4kt.util
 
 import com.google.devtools.ksp.symbol.ClassKind.ENUM_CLASS
+import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
@@ -40,3 +41,4 @@ internal fun KSClassDeclaration.requireMutableDataClass() {
 }
 
 internal fun KSPropertyDeclaration.isComposite() = annotations.find { it.shortName.asString() == "META" }?.arguments?.find { it.name?.asString() == "isComposite" }?.value as? Boolean ?: false
+internal fun KSPropertyDeclaration.metaSize() = annotations.find { it.shortName.asString() == "META" }?.arguments?.find { it.name?.asString() == "size" }?.value as? Int ?: -1

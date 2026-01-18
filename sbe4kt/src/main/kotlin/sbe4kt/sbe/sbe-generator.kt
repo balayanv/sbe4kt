@@ -25,14 +25,23 @@ internal fun generateSbe() {
 
    log.info("Generating SBE schema to $schemaFile")
 
-   // Collect all composite types from all messages
    val compositeTypes = mutableMapOf<String, sbe4kt.ir.IR.Composite>()
+   val charSeqSizes = mutableSetOf<Int>()
+
    ir.types.forEach { message ->
       message.fields.forEach { field ->
          if (field.type is sbe4kt.ir.IR.Composite) {
             compositeTypes[field.type.sbeName] = field.type
          }
+         if (field.type is sbe4kt.ir.IR.FixedCharSeq) {
+            charSeqSizes.add(field.type.fixedSize)
+         }
       }
+   }
+
+   // Generate FixedCharSeq type definitions
+   val charSeqTypesXml = charSeqSizes.sorted().joinToString("\n") { size ->
+      """        <type name="CharSeq$size" primitiveType="char" length="$size" characterEncoding="US-ASCII"/>"""
    }
 
    // Generate composite type definitions
@@ -68,6 +77,7 @@ internal fun generateSbe() {
             <validValue name="F">0</validValue>
             <validValue name="T">1</validValue>
         </enum>
+$charSeqTypesXml
 $compositeTypesXml
     </types>
 $messageBodies

@@ -12,18 +12,20 @@ fun String.toSnakeCase(): String {
         .replace(Regex("([A-Z]+)([A-Z][a-z])"), "$1_$2")
 }
 
-private fun generateAllCompositeHelpers(compositeTypes: Set<IR.Composite>) {
-   if (compositeTypes.isEmpty()) return
+private fun generateCommonExtensions(compositeTypes: Set<IR.Composite>, hasFixedCharSeq: Boolean) {
+   if (compositeTypes.isEmpty() && !hasFixedCharSeq) return
 
    val file = gen.createNewFile(
       Dependencies(false),
-      "sbe4kt",
+      "sbe4kt.common",
       "CommonExtensions"
    )
 
    file.bufferedWriter().use { writer ->
       // Collect all imports from all composite types
       val imports = mutableSetOf<String>()
+      if (hasFixedCharSeq) imports.add("kotlin.random.Random")
+
       compositeTypes.forEach { composite ->
          composite.fields.forEach { field ->
             // Don't import types from the same package (sbe4kt)
@@ -34,10 +36,19 @@ private fun generateAllCompositeHelpers(compositeTypes: Set<IR.Composite>) {
       }
 
       val importsSection = if (imports.isNotEmpty()) {
-         imports.sorted().joinToString("\n") { "import $it" } + "\n"
+         imports.sorted().joinToString("\n") { "import $it" } + "\n\n"
       } else {
          ""
       }
+
+      val randomAsciiHelper = if (hasFixedCharSeq) {
+         """fun generateRandomAscii(length: Int): String {
+   val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+   return (1..length).map { chars[Random.nextInt(chars.length)] }.joinToString("")
+}
+
+"""
+      } else ""
 
       val allHelpers = compositeTypes.joinToString("\n\n") { composite ->
          val className = composite.name
@@ -70,7 +81,7 @@ class ${className}W(
    private var ${className.lowercase()}W: ${className}Encoder,
 ) {
 $writeMethods
-}""".trimIndent()
+}"""
       }
 
       writer.write(
@@ -79,8 +90,7 @@ $writeMethods
 
 package sbe4kt
 
-$importsSection
-$allHelpers
+$importsSection$randomAsciiHelper$allHelpers
 """.trimIndent())
    }
 }
@@ -88,18 +98,22 @@ $allHelpers
 internal fun generateKotlinExtensions() {
    log.info("Generating Kotlin extensions...")
 
-   // First generate composite helpers
+   // Collect composite types and check for FixedCharSeq fields
    val compositeTypes = mutableSetOf<IR.Composite>()
+   var hasFixedCharSeq = false
    ir.types.forEach { message ->
       message.fields.forEach { field ->
          if (field.type is IR.Composite) {
             compositeTypes.add(field.type)
          }
+         if (field.type is IR.FixedCharSeq) {
+            hasFixedCharSeq = true
+         }
       }
    }
 
-   // Generate all composite helpers in a single file
-   generateAllCompositeHelpers(compositeTypes)
+   // Generate common extensions (composites + generateRandomAscii if needed)
+   generateCommonExtensions(compositeTypes, hasFixedCharSeq)
 
    ir.types.forEach { message ->
       log.info("Generating extensions for ${message.className}")
@@ -202,7 +216,8 @@ private fun generateKotlinExtensionsForMessage(
          }
 
          val displayTypeName = field.type.name
-         layoutRows.add(".addRow(\"$displayOffset\", \"${field.name}\", \"${displayTypeName}\", \"${field.type.size}\", this.${field.name}.toString())")
+         val valueExpr = if (field.type.name == "String") "this.${field.name}" else "this.${field.name}.toString()"
+         layoutRows.add(".addRow(\"$displayOffset\", \"${field.name}\", \"${displayTypeName}\", \"${field.type.size}\", $valueExpr)")
       }
 
       // Add final padding if message needs it for alignment
@@ -234,7 +249,18 @@ private fun generateKotlinExtensionsForMessage(
             val compositeType = field.type as IR.Composite
             "   private var ${field.name}RW = ${compositeType.name}RW($encoderName.${field.name}(), $decoderName.${field.name}())"
          }
-      val compositeHelperFieldsWithPrefix = if (compositeHelperFields.isNotEmpty()) "\n$compositeHelperFields\n" else ""
+
+      // For RW class, prepare FixedCharSeq view fields
+      val charSeqViewFields = sortedFieldsForEncoding
+         .filter { it.type is IR.FixedCharSeq }
+         .joinToString("\n") { field ->
+            val charSeqType = field.type as IR.FixedCharSeq
+            "   private val ${field.name}View = sbe4kt.BufferCharSeq(${charSeqType.fixedSize})"
+         }
+
+      val compositeHelperFieldsWithPrefix = if (compositeHelperFields.isNotEmpty() || charSeqViewFields.isNotEmpty()) {
+         "\n$compositeHelperFields${ if (compositeHelperFields.isNotEmpty() && charSeqViewFields.isNotEmpty()) "\n" else "" }$charSeqViewFields\n"
+      } else ""
 
       // For W class, prepare write-only composite helpers
       val compositeWriteHelperFields = sortedFieldsForEncoding
@@ -252,41 +278,48 @@ private fun generateKotlinExtensionsForMessage(
             val compositeType = field.type as IR.Composite
             "   private var ${field.name}R = ${compositeType.name}R($decoderName.${field.name}())"
          }
-      val compositeReadHelperFieldsWithPrefix = if (compositeReadHelperFields.isNotEmpty()) "\n$compositeReadHelperFields\n" else ""
+
+      // For R class, prepare FixedCharSeq view fields
+      val charSeqReadViewFields = sortedFieldsForEncoding
+         .filter { it.type is IR.FixedCharSeq }
+         .joinToString("\n") { field ->
+            val charSeqType = field.type as IR.FixedCharSeq
+            "   private val ${field.name}View = sbe4kt.BufferCharSeq(${charSeqType.fixedSize})"
+         }
+
+      val compositeReadHelperFieldsWithPrefix = if (compositeReadHelperFields.isNotEmpty() || charSeqReadViewFields.isNotEmpty()) {
+         "\n$compositeReadHelperFields${ if (compositeReadHelperFields.isNotEmpty() && charSeqReadViewFields.isNotEmpty()) "\n" else "" }$charSeqReadViewFields\n"
+      } else ""
 
       val flyweightSetters = sortedFieldsForEncoding.joinToString("\n") { field ->
-         if (field.type is IR.Composite) {
-            // Composite fields don't have setters, accessed via helper
-            ""
-         } else {
-            "   fun ${field.name}(${field.name}: ${field.type.name}) = apply { ${field.type.howToEncodeFromField(encoderName, field.name)} }"
+         when (field.type) {
+            is IR.Composite -> "" // Composite fields don't have setters, accessed via helper
+            is IR.FixedCharSeq -> "   fun ${field.name}(${field.name}: CharSequence) = apply { ${field.type.howToEncodeFromField(encoderName, field.name)} }"
+            else -> "   fun ${field.name}(${field.name}: ${field.type.name}) = apply { ${field.type.howToEncodeFromField(encoderName, field.name)} }"
          }
-      }.replace(Regex("\n+"), "\n") // Clean up multiple empty lines
+      }.replace(Regex("\n+"), "\n")
 
       val flyweightGetters = sortedFieldsForEncoding.joinToString("\n") { field ->
-         if (field.type is IR.Composite) {
-            // Return the helper for composite fields
-            "   fun ${field.name}() = ${field.name}RW"
-         } else {
-            "   fun ${field.name}(): ${field.type.name} = ${field.type.howToDecodeFromField(decoderName, field.name)}"
+         when (field.type) {
+            is IR.Composite -> "   fun ${field.name}() = ${field.name}RW"
+            is IR.FixedCharSeq -> "   fun ${field.name}(): CharSequence = ${field.name}View.wrap($decoderName.buffer(), $decoderName.offset() + ${field.offset})"
+            else -> "   fun ${field.name}(): ${field.type.name} = ${field.type.howToDecodeFromField(decoderName, field.name)}"
          }
       }
 
       val flyweightWriteSetters = sortedFieldsForEncoding.joinToString("\n") { field ->
-         if (field.type is IR.Composite) {
-            // Return write helper for composite fields
-            "   fun ${field.name}() = ${field.name}W"
-         } else {
-            "   fun ${field.name}(${field.name}: ${field.type.name}) = apply { ${field.type.howToEncodeFromField(encoderName, field.name)} }"
+         when (field.type) {
+            is IR.Composite -> "   fun ${field.name}() = ${field.name}W"
+            is IR.FixedCharSeq -> "   fun ${field.name}(${field.name}: CharSequence) = apply { ${field.type.howToEncodeFromField(encoderName, field.name)} }"
+            else -> "   fun ${field.name}(${field.name}: ${field.type.name}) = apply { ${field.type.howToEncodeFromField(encoderName, field.name)} }"
          }
       }.replace(Regex("\n+"), "\n") // Clean up multiple empty lines
 
       val flyweightReadGetters = sortedFieldsForEncoding.joinToString("\n") { field ->
-         if (field.type is IR.Composite) {
-            // Return read helper for composite fields
-            "   fun ${field.name}() = ${field.name}R"
-         } else {
-            "   fun ${field.name}(): ${field.type.name} = ${field.type.howToDecodeFromField(decoderName, field.name)}"
+         when (field.type) {
+            is IR.Composite -> "   fun ${field.name}() = ${field.name}R"
+            is IR.FixedCharSeq -> "   fun ${field.name}(): CharSequence = ${field.name}View.wrap($decoderName.buffer(), $decoderName.offset() + ${field.offset})"
+            else -> "   fun ${field.name}(): ${field.type.name} = ${field.type.howToDecodeFromField(decoderName, field.name)}"
          }
       }
 
@@ -304,6 +337,7 @@ import sbe4kt.MessageHeaderDecoder
 import sbe4kt.util.CSV
 import kotlin.random.Random
 $${if (sortedFieldsForEncoding.any { it.type is IR.Composite }) "import sbe4kt.*" else ""}
+$${if (sortedFieldsForEncoding.any { it.type is IR.FixedCharSeq }) "import sbe4kt.generateRandomAscii" else ""}
 $$importsSection
 const val $$sizeConstName = MessageHeaderEncoder.ENCODED_LENGTH + $$totalSize
 
@@ -338,15 +372,8 @@ $$encoderBody
 fun decode$$className(instance: $$className, buffer: UnsafeBuffer, offset: Int = 0): Int {
    val headerDecoder = MessageHeaderDecoder()
    val $$decoderName = $${className}Decoder()
-
    headerDecoder.wrap(buffer, offset)
-
-   $$decoderName.wrap(
-      buffer,
-      offset + MessageHeaderEncoder.ENCODED_LENGTH,
-      headerDecoder.blockLength(),
-      headerDecoder.version()
-   )
+   $$decoderName.wrap(buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH, headerDecoder.blockLength(), headerDecoder.version())
 
 $$decoderBody
 
