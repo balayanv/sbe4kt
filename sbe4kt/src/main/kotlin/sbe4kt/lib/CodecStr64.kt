@@ -1,39 +1,7 @@
 package sbe4kt
 
-import kotlin.math.ceil
-import kotlin.math.log2
-
-/**
- * For ASCII the limit is 128 (0-127).
- */
-abstract class CharSet64(val chars: String, val limit: Int = 128) {
-   private val lookup = IntArray(limit) { -1 }
-
-   init {
-      require(chars.isNotEmpty()) { "Alphabet cannot be empty" }
-      require(chars.length == chars.toSet().size) { "Duplicates not allowed" }
-
-      // pre-compute the indices
-      for (i in chars.indices) {
-         val code = chars[i].code
-         require(code < limit) { "Character '${chars[i]}' ($code) is out of limit ($limit)." }
-         lookup[code] = i
-      }
-   }
-
-   /**
-    * Optimized O(1) lookup with bounds safety.
-    * Returns -1 if character is not in the set or out of bounds.
-    */
-   fun getIndexOf(c: Char): Int {
-      val code = c.code
-      if (code !in 0..<limit) return -1
-      return lookup[code]
-   }
-
-   operator fun get(index: Int): Char = chars[index]
-   override fun toString() = "CharSet64(chars='$chars')"
-}
+import sbe4kt.lib.CharSet
+import sbe4kt.lib.randomStr
 
 /**
  * A high-performance packer using Bit-Shifting with Implicit Null Termination.
@@ -41,19 +9,25 @@ abstract class CharSet64(val chars: String, val limit: Int = 128) {
  * Uses all 64 bits. If the string fills the capacity, no null terminator is needed.
  *
  * For example storing a "XBTUSDTH26" string (a futures symbol) you'd have these results.
- * With StringPacker its 8 bytes, with char[] its 40 bytes, with String its 64 bytes.
- * StringPacker uses a simple long and fits nicely in a register, its 87.5% more compact,
+ * With CodecInt64 its 8 bytes,
+ * with char[] its 40 bytes,
+ * with String its 64 bytes.
+ *
+ * CodecInt64 uses a simple long and fits nicely in a register, its 87.5% more compact,
  * and is faster to read and write to.
+ *
+ * Note : because 0 is the null terminator, using a charset of 2 (say "TF" for True/False)
+ * can store 32 characters not 64, because bit with is 2 (we need 2 bits to represent 1 character)
  */
-class CodecStr64(val charset: CharSet64) {
-   // We need 'alphabet.length + 1' states because 0 is reserved for EOS.
-   private val bitWidth: Int = ceil(log2((charset.chars.length + 1).toDouble())).toInt()
-   private val mask: Long = (1L shl bitWidth) - 1
-   val maxCap: Int = 64 / bitWidth
+class CodecStr64(val charset: CharSet) {
+   val maxCap: Int = 64 / charset.bitWidth
+   private val mask: Long = (1L shl charset.bitWidth) - 1
 
    init {
-      require(bitWidth * maxCap <= 64) { "Configuration error: calculated width exceeds 64 bits." }
+      require(charset.bitWidth * maxCap <= 64) { "Configuration error: calculated width exceeds 64 bits." }
    }
+
+   fun randomStr() = charset.randomStr(maxCap)
 
    /**
     * Packs the input string into a Long.
@@ -73,7 +47,7 @@ class CodecStr64(val charset: CharSet64) {
          val wireValue = (charIndex + 1).toLong()
 
          // Shift and OR
-         packed = packed or (wireValue shl (i * bitWidth))
+         packed = packed or (wireValue shl (i * charset.bitWidth))
       }
 
       return packed
@@ -85,16 +59,16 @@ class CodecStr64(val charset: CharSet64) {
     */
    fun length(data: Long): Int {
       for (i in 0 until maxCap) {
-         val wireValue = ((data ushr (i * bitWidth)) and mask).toInt()
-         if (wireValue == 0) return i  // Found null terminator
+         val wireValue = ((data ushr (i * charset.bitWidth)) and mask).toInt()
+         if (wireValue == 0) return i  // null terminator
       }
-      return maxCap  // String fills entire capacity (no null terminator needed)
+      return maxCap  // entire capacity used (no null terminator needed)
    }
 
    fun decode(data: Long, output: Appendable) {
       for (i in 0 until maxCap) {
-         val wireValue = ((data ushr (i * bitWidth)) and mask).toInt()
-         if (wireValue == 0) break  // Stop at null terminator
+         val wireValue = ((data ushr (i * charset.bitWidth)) and mask).toInt()
+         if (wireValue == 0) break  // null terminator
          val charIndex = wireValue - 1
          if (charIndex >= charset.chars.length) {
             throw IllegalArgumentException("Corrupted data: Value $wireValue out of bounds for charset")
@@ -118,7 +92,7 @@ class CodecStr64(val charset: CharSet64) {
       if (i < 0) throw IndexOutOfBoundsException("Index $i is negative")
       if (i >= maxCap) throw IndexOutOfBoundsException("Index $i exceeds maximum capacity $maxCap")
 
-      val wireValue = ((data ushr (i * bitWidth)) and mask).toInt()
+      val wireValue = ((data ushr (i * charset.bitWidth)) and mask).toInt()
       if (wireValue == 0) throw IndexOutOfBoundsException("Index $i is beyond string length")
 
       val charIndex = wireValue - 1
@@ -128,5 +102,5 @@ class CodecStr64(val charset: CharSet64) {
       return charset[charIndex]
    }
 
-   override fun toString() = "CodecStr64(charset=$charset, maxCap=$maxCap)"
+   override fun toString() = "CodecStr64(charset=$charset, maxCap=$maxCap, bitWidth=${charset.bitWidth})"
 }
