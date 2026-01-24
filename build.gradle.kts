@@ -1,6 +1,3 @@
-import org.gradle.api.tasks.StopExecutionException
-import org.gradle.api.tasks.PathSensitivity
-
 val jvmUnsafeAccessArg = "--sun-misc-unsafe-memory-access=allow"
 val sbeCompilerMain = "uk.co.real_logic.sbe.SbeTool"
 val kotlinVersion = "2.3.0"
@@ -47,100 +44,76 @@ dependencies {
 }
 
 application {
-   mainClass.set("example.ExampleKt")
+   mainClass.set("example.UnionsKt")
    applicationDefaultJvmArgs = listOf(jvmUnsafeAccessArg)
 }
 
 sourceSets {
-    main {
-        kotlin {
-            srcDirs(
-                "src/main/kotlin",
-                layout.buildDirectory.dir("generated/ksp/main/kotlin")
-            )
-        }
-        java {
-            srcDirs(
-                "src/main/java",
-                layout.buildDirectory.dir("generated/sbe/main/java")
-            )
-        }
-    }
-    test {
-        kotlin {
-            srcDirs(
-                "src/test/kotlin",
-                layout.buildDirectory.dir("generated/ksp/test/kotlin")
-            )
-        }
-        java {
-            srcDirs(
-                "src/test/java",
-                layout.buildDirectory.dir("generated/sbe/test/java")
-            )
-        }
-    }
+   main {
+      kotlin { srcDirs("src/main/kotlin", layout.buildDirectory.dir("generated/ksp/main/kotlin")) }
+      java { srcDirs("src/main/java", layout.buildDirectory.dir("generated/sbe/main/java")) }
+   }
+   test {
+      kotlin { srcDirs("src/test/kotlin", layout.buildDirectory.dir("generated/ksp/test/kotlin")) }
+      java { srcDirs("src/test/java", layout.buildDirectory.dir("generated/sbe/test/java")) }
+   }
 }
 
 
-/**
- * Creates a JavaExec task for generating SBE code from XML schema
- */
 fun createSbeGenerateTask(
-    taskName: String,
-    sourceSet: String,
-    kspDependency: String,
-    generatePackageInfo: Boolean = true
+   taskName: String,
+   sourceSet: String,
+   kspDependency: String,
+   generatePackageInfo: Boolean = true
 ): TaskProvider<JavaExec> {
-    return tasks.register<JavaExec>(taskName) {
-        group = "build"
-        description = "Generate SBE Java code from $sourceSet XML schema"
+   return tasks.register<JavaExec>(taskName) {
+      group = "build"
+      description = "Generate SBE Java code from $sourceSet XML schema"
 
-        dependsOn(kspDependency)
+      dependsOn(kspDependency)
 
-        mainClass.set(sbeCompilerMain)
-        classpath = configurations["sbeCompiler"]
-        jvmArgs(jvmUnsafeAccessArg)
+      mainClass.set(sbeCompilerMain)
+      classpath = configurations["sbeCompiler"]
+      jvmArgs(jvmUnsafeAccessArg)
 
-        val schemaFile = file("build/generated/ksp/$sourceSet/resources/sbe-schema.xml")
-        val outputDir = file("build/generated/sbe/$sourceSet/java")
+      val schemaFile = file("build/generated/ksp/$sourceSet/resources/sbe-schema.xml")
+      val outputDir = file("build/generated/sbe/$sourceSet/java")
 
-        inputs.files(schemaFile)
-        outputs.dir(outputDir)
+      inputs.files(schemaFile)
+      outputs.dir(outputDir)
 
-        doFirst {
-            outputDir.mkdirs()
-            if (schemaFile.exists()) {
-                systemProperty("sbe.output.dir", outputDir.absolutePath)
-                systemProperty("sbe.generate.ir", "true")
-                systemProperty("sbe.target.language", "Java")
-                systemProperty("sbe.java.generate.package.info", generatePackageInfo.toString())
-                args = listOf(schemaFile.absolutePath)
-            } else {
-                println("$sourceSet SBE schema not found at ${schemaFile.absolutePath}, skipping SBE generation")
-                throw StopExecutionException("Schema file not found")
-            }
-        }
+      doFirst {
+         outputDir.mkdirs()
+         if (schemaFile.exists()) {
+            systemProperty("sbe.output.dir", outputDir.absolutePath)
+            systemProperty("sbe.generate.ir", "true")
+            systemProperty("sbe.target.language", "Java")
+            systemProperty("sbe.java.generate.package.info", generatePackageInfo.toString())
+            args = listOf(schemaFile.absolutePath)
+         } else {
+            println("$sourceSet SBE schema not found at ${schemaFile.absolutePath}, skipping SBE generation")
+            throw StopExecutionException("Schema file not found")
+         }
+      }
 
-        onlyIf {
-            schemaFile.exists()
-        }
-    }
+      onlyIf {
+         schemaFile.exists()
+      }
+   }
 }
 
-// Create SBE generation tasks for main and test source sets
 val sbeGenerateMain = createSbeGenerateTask(
-    taskName = "sbeGenerateMain",
-    sourceSet = "main",
-    kspDependency = "kspKotlin",
-    generatePackageInfo = true
+   taskName = "sbeGenerateMain",
+   sourceSet = "main",
+   kspDependency = "kspKotlin",
+   generatePackageInfo = true
 )
 
 val sbeGenerateTest = createSbeGenerateTask(
-    taskName = "sbeGenerateTest",
-    sourceSet = "test",
-    kspDependency = "kspTestKotlin",
-    generatePackageInfo = false
+   taskName = "sbeGenerateTest",
+   sourceSet = "test",
+   kspDependency = "kspTestKotlin",
+   generatePackageInfo = false
 )
 
 tasks.named("clean") {
@@ -150,30 +123,15 @@ tasks.named("clean") {
 }
 
 tasks.test {
-    useJUnitPlatform()
-    jvmArgs(jvmUnsafeAccessArg)
+   useJUnitPlatform()
+   jvmArgs(jvmUnsafeAccessArg)
 }
 
-tasks.named("compileJava") {
-    dependsOn(sbeGenerateMain)
-}
+tasks.named("compileJava") { dependsOn(sbeGenerateMain) }
+tasks.named("compileKotlin") { dependsOn(sbeGenerateMain) }
 
-tasks.named("compileTestJava") {
-    dependsOn(sbeGenerateTest)
-}
+tasks.named("compileTestJava") { dependsOn(sbeGenerateTest) }
+tasks.named("compileTestKotlin") { dependsOn(sbeGenerateTest) }
 
-tasks.named("compileKotlin") {
-    dependsOn(sbeGenerateMain)
-}
-
-tasks.named("compileTestKotlin") {
-    dependsOn(sbeGenerateTest)
-}
-
-tasks.withType<Tar> {
-   duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-tasks.withType<Zip> {
-   duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
+tasks.withType<Tar> { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }
+tasks.withType<Zip> { duplicatesStrategy = DuplicatesStrategy.EXCLUDE }

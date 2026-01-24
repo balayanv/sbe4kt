@@ -1,198 +1,219 @@
 package sbe4kt.ir
 
-import com.google.devtools.ksp.symbol.*
-import sbe4kt.ir.IR.Composite.CompositeField
+import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSDeclaration
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration
+import com.google.devtools.ksp.symbol.KSTypeAlias
 import sbe4kt.util.*
+import sbe4kt.util.isStruct
+import sbe4kt.util.requireNonConflictingSettings
+import sbe4kt.util.sbeAnnotation
 
 
-internal data class IrSchema(
-   var sourceSet: String = "main",
-   val types: ArrayList<IrMessage> = ArrayList()
+/**
+ * High level interfaces representing IR.
+ */
+internal sealed interface IR {
+
+   sealed interface Root {
+
+   }
+
+   sealed interface Leaf {
+      val sbeName: String
+      val name: String
+      val defaultValue: String
+      val randomValue: String
+      val size: Int
+      val packageStr: String
+      val imports: Set<String>
+
+      fun encodeField(encoder: String, field: String, value: String) = "$encoder.$field($value)"
+      fun decodeField(decoder: String, field: String) = "$decoder.$field()"
+
+      fun convertToSbe(value: String) = value
+      fun convertFromSbe(value: String) = value
+
+      fun howToEncodeFromSource(encoder: String, field: String, instance: String) = encodeField(encoder, field, convertToSbe("$instance.$field"))
+      fun howToDecodeIntoTarget(decoder: String, field: String, instance: String) = assignToInstanceField(instance, field, convertFromSbe(decodeField(decoder, field)))
+
+      fun assignToInstanceField(instance: String, field: String, value: String) = "$instance.$field = $value"
+
+      fun fwSetter(encoder: String, field: String) = encodeField(encoder, field, convertToSbe(field))
+      fun fwGetter(decoder: String, field: String): String = convertFromSbe(decodeField(decoder, field))
+   }
+}
+
+internal data class Schema(
+   val annotatedTypes: List<KSClassDeclaration>,
 ) {
+   val enums: ArrayList<Enum> = ArrayList()
+   val structs: ArrayList<Struct> = ArrayList()
+   val messages: ArrayList<Message> = ArrayList()
+   val unionFields: ArrayList<Union> = ArrayList()
+   val byteArraySizes = HashSet<Int>()
+   val fixedStrings = HashSet<StringN>()
 
    val ids = HashSet<Int>()
    var id = 1
+
+   init {
+      for (type: KSClassDeclaration in annotatedTypes) {
+         type.requireMutableDataClass()
+         val annotation = type.sbeAnnotation()!!
+         annotation.requireNonConflictingSettings()
+
+         if (annotation.isStruct()) {
+            structs.add(Struct(type))
+         } else {
+            val message = Message(type)
+            messages.add(message)
+            if (message.id != -1) ids.add(message.id)
+         }
+      }
+
+      // auto-assign IDs after all explicit IDs are known
+      for (message in messages) {
+         if (message.id == -1) {
+            message.id = getNextAvailableId()
+            ids.add(message.id)
+         }
+      }
+
+      messages.sortBy { it.id }
+
+      for (message in messages) {
+         for (field in message.fields) {
+            extractSpecialTypes(field.type)
+         }
+      }
+
+      for (struct in structs) {
+         for (field in struct.fields) {
+            extractSpecialTypes(field.type)
+         }
+      }
+   }
+
+   private fun extractSpecialTypes(type: IR.Leaf) {
+      when (type) {
+         is Enum -> enums.add(type)
+         is ByteArrayN -> byteArraySizes.add(type.length)
+         is StringN -> fixedStrings.add(type)
+         is Value -> extractSpecialTypes(type.underlyingType)
+         is Message -> byteArraySizes.add(type.size) // Nested messages use ByteArrayN
+         is Union -> {
+            unionFields.add(type)
+            byteArraySizes.add(type.maxSize)
+            type.allowedTypes.forEach { extractSpecialTypes(it) }
+         }
+         else -> {} // primitives, structs don't contain special types to extract
+      }
+   }
 
    private fun getNextAvailableId(): Int {
       while (ids.contains(id)) id++
       return id
    }
-
-   fun add(irMessage: IrMessage) {
-      if (irMessage.id == -1) {
-         irMessage.id = getNextAvailableId()
-      }
-
-      ids.add(irMessage.id)
-      types.add(irMessage)
-   }
-
-   fun prepare() {
-      types.sortBy { it.id }
-      types.forEach { it.prepare() }
-   }
-}
-
-internal data class IrMessage(
-   val type: KSClassDeclaration
-) {
-   val packageName: String = type.packageName.asString()
-   val className: String = type.simpleName.asString()
-   val annotationArgs = type.annotations.find { it.shortName.asString() == "SBE" }!!.arguments.validateSbeAnnotation()
-   var id: Int = annotationArgs.find { it.name?.asString() == "id" }?.value as? Int ?: -1
-   val usePadding: Boolean = annotationArgs.find { it.name?.asString() == "usePadding" }?.value as? Boolean ?: false
-
-   var blockLength: Int = -1
-   val fields: List<IrField> = getIrFields()
-
-   fun prepare() {
-      var currentOffset = 0
-      val sortedFields = fields.sortedByDescending { it.type.size }
-
-      sortedFields.forEachIndexed { index, field ->
-         if (usePadding) {
-            val padding = (8 - (currentOffset % 8)) % 8
-            currentOffset += padding
-         }
-         field.offset = currentOffset
-         field.sbeOrder = index + 1
-         currentOffset += field.type.size
-      }
-
-      blockLength = if (usePadding) {
-         val remainder = currentOffset % 8
-         if (remainder == 0) currentOffset else currentOffset + (8 - remainder)
-      } else {
-         currentOffset
-      }
-   }
-
-   private fun getIrFields(): List<IrField> {
-      val fields = ArrayList<IrField>()
-
-      type.getAllProperties().forEachIndexed { index, prop ->
-         fields.add(IrField(prop, index, className))
-      }
-
-      fields.sortByDescending { it.type.size }
-      fields.forEachIndexed { index, field -> field.id = index + 1 }
-      return fields
-   }
 }
 
 
-internal data class IrField(
+internal data class Field(
    val prop: KSPropertyDeclaration,
    val declarationOrder: Int = 0,
-   val parentClassName: String? = null
 ) {
-   val name: String = prop.simpleName.asString().validateNotReservedWord()
+   val name: String = prop.simpleName.asString().requireNotReserveWord()
+   val type: IR.Leaf = prop.toLeaf()
+   val isNullable: kotlin.Boolean = prop.type.resolve().isMarkedNullable
+
    var id: Int = -1
-   val type: IR = getFieldType()
    var offset: Int = -1
    var sbeOrder: Int = -1
-
-   fun addPackageIfNecessary(currentPackage: String, whereToAdd: MutableCollection<String>) {
-      val packageStr = type.packageStr
-
-      // Add imports for types from different packages
-      if (packageStr.isNotEmpty() && packageStr != currentPackage) {
-         // Add full type name, not just package
-         val importStr = when (type) {
-            is IR.Composite -> "$packageStr.${type.name}"
-            is IR.Enum -> "$packageStr.${type.name}"
-            is IR.ValueClass -> "$packageStr.${type.name}"
-            else -> packageStr
-         }
-         whereToAdd.add(importStr)
-      }
-
-      if (type is IR.Composite) {
-         type.fields.forEach { compositeField ->
-            val compPackageStr = compositeField.type.packageStr
-            if (compPackageStr.isNotEmpty() && compPackageStr != currentPackage) {
-               val importStr = when (compositeField.type) {
-                  is IR.Enum -> "$compPackageStr.${compositeField.type.name}"
-                  is IR.ValueClass -> "$compPackageStr.${compositeField.type.name}"
-                  else -> compPackageStr
-               }
-               whereToAdd.add(importStr)
-            }
-         }
-      }
-   }
-
-   private fun getFieldType(): IR {
-      val resolvedType = prop.type.resolve()
-      val fieldSize = prop.metaSize()
-
-      // Handle String/CharSequence with @META(size = N)
-      if (fieldSize > 0) {
-         val typeName = resolvedType.declaration.qualifiedName()
-         if (typeName == "kotlin.String") {
-            return IR.FixedCharSeq(fieldSize, "String")
-         }
-         if (typeName == "kotlin.CharSequence") {
-            return IR.FixedCharSeq(fieldSize, "CharSequence")
-         }
-      }
-
-      if (prop.isComposite()) {
-         val compositeDeclaration = resolvedType.declaration as KSClassDeclaration
-         compositeDeclaration.requireMutableDataClass()
-
-         val compositeFields = compositeDeclaration.getAllProperties().map { compProp ->
-            CompositeField(
-               name = compProp.simpleName.asString(),
-               type = resolveType(compProp.type.resolve())
-            )
-         }
-
-         return IR.Composite(compositeDeclaration, compositeFields.toList())
-      }
-
-      return resolveType(resolvedType, parentClassName)
-   }
 }
 
+// recursive IR resolution
 
-private fun resolveType(resolvedType: KSType, parentClassName: String? = null): IR {
+internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
+   val meta = this.metaAnnotation()
+   val size = meta.size()
+   val oneOf = meta.oneOf()
+
+   val resolvedType = this.type.resolve()
    val declaration = resolvedType.declaration
 
+   if (oneOf.isNotEmpty()) {
+      require(declaration.qualifiedName() == "kotlin.Any") { "Union field '${simpleName.asString()}' must be of type Any, got ${declaration.qualifiedName()}" }
+      val allowedTypes = oneOf.map { typeDecl ->
+         require(typeDecl.sbeAnnotation() != null) { "Union type '${typeDecl.simpleName()}' must be annotated with @SBE" }
+         typeDecl.requireMutableDataClass()
+         if (typeDecl.sbeAnnotation().isStruct()) {
+            Struct(typeDecl)
+         } else {
+            Message(typeDecl)
+         }
+      }
+      return Union(allowedTypes, simpleName.asString())
+   }
+
+   if (size > 0) {
+      if (declaration.qualifiedName() == "kotlin.ByteArray") {
+         require(size > 0) { "ByteArray size must be positive, got $size" }
+         return ByteArrayN(size)
+      }
+      if (declaration.qualifiedName() == "kotlin.String") {
+         require(size > 0) { "String size must be positive, got $size" }
+         val encoding = meta.encoding()
+         return StringN(size, encoding)
+      }
+   }
+
+   return recursiveResolveLeaf(declaration)
+}
+
+private fun recursiveResolveLeaf(declaration: KSDeclaration): IR.Leaf {
+
    if (declaration is KSTypeAlias) {
-      return resolveType(declaration.type.resolve(), parentClassName)
+      return recursiveResolveLeaf(declaration.type.resolve().declaration)
    }
 
    if (declaration is KSClassDeclaration) {
       if (declaration.isValueClass()) {
-         val underlyingType = resolveType(declaration.primaryConstructor!!.parameters.first().type.resolve(), parentClassName)
-         return IR.ValueClass(declaration, underlyingType)
+         val first = declaration.primaryConstructor!!.parameters.first()
+         val underlyingType = recursiveResolveLeaf(first.type.resolve().declaration)
+
+         if (underlyingType == Int64 && declaration.implementsCharSequence()) {
+            return Str64Value(declaration)
+         }
+
+         return Value(declaration, underlyingType)
       }
 
       if (declaration.isEnum()) {
-         return IR.Enum(declaration)
+         return Enum(declaration)
+      }
+
+      if (declaration.sbeAnnotation().isStruct()) {
+         declaration.requireMutableDataClass()
+         return Struct(declaration)
+      }
+
+      // Check if this is an @SBE annotated message type (for nesting)
+      if (declaration.sbeAnnotation() != null && !declaration.sbeAnnotation().isStruct()) {
+         declaration.requireMutableDataClass()
+         return Message(declaration)
       }
    }
 
-   // primitive
    return when (declaration.qualifiedName()) {
-      "kotlin.Boolean" -> IR.Boolean
-      "kotlin.Char" -> IR.Char
-      "kotlin.Byte" -> IR.Int8
-      "kotlin.Short" -> IR.Int16
-      "kotlin.Int" -> IR.Int32
-      "kotlin.Long" -> IR.Int64
-      "kotlin.Float" -> IR.Float
-      "kotlin.Double" -> IR.Double
+      "kotlin.Boolean" -> Boolean
+      "kotlin.Char" -> Char
+      "kotlin.Byte" -> Int8
+      "kotlin.Short" -> Int16
+      "kotlin.Int" -> Int32
+      "kotlin.Long" -> Int64
+      "kotlin.Float" -> Float
+      "kotlin.Double" -> Double
       else -> throw IllegalArgumentException("Unsupported type: ${declaration.qualifiedName()}")
    }
 }
 
-private fun List<KSValueArgument>.validateSbeAnnotation() = apply {
-   val usePadding = this.find { it.name?.asString() == "usePadding" }?.value as? Boolean ?: false
-   val allowVarLengthFields = this.find { it.name?.asString() == "allowVarLengthFields" }?.value as? Boolean ?: false
-
-   require(!(usePadding && allowVarLengthFields)) {
-      "usePadding and allowVarLengthFields cannot both be true. Padding requires fixed field positions which conflicts with variable length fields."
-   }
-}
