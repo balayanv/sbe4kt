@@ -125,6 +125,7 @@ internal data class Field(
    val name: String = prop.simpleName.asString().requireNotReserveWord()
    val type: IR.Leaf = prop.toLeaf()
    val isNullable: kotlin.Boolean = prop.type.resolve().isMarkedNullable
+   val tags: List<String> = prop.metaAnnotation().tags()
 
    var id: Int = -1
    var offset: Int = -1

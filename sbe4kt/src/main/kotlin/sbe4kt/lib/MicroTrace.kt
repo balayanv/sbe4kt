@@ -2,11 +2,11 @@ package sbe4kt.lib
 
 /**
  * Allows to record 4 durations in microseconds packed into a single Long.
- * Each slot holds a 16-bit value up to 65535us or 65ms.
+ * Each slot holds a 16-bit value up to 65535 microseconds or 65 milliseconds.
  * Values that are exactly MAX_SLOT_VALUE signal either recorded number was higher than max or never was set.
  */
 @JvmInline
-value class MicroTrace(val value: Long = 0L) {
+value class MicroTag4(val value: Long = 0L) {
 
    companion object {
       val MAX_SLOT_VALUE = 0xFFFF.us // 65,535
@@ -19,14 +19,14 @@ value class MicroTrace(val value: Long = 0L) {
    fun set3(duration: Micros) = set(duration, 32)
    fun set4(duration: Micros) = set(duration, 48)
 
-   private fun set(duration: Micros, shift: Int): MicroTrace {
+   private fun set(duration: Micros, shift: Int): MicroTag4 {
       val safeVal = when {
          duration < ZERO -> ZERO
          duration > MAX_SLOT_VALUE -> MAX_SLOT_VALUE
          else -> duration
       }
       val clearMask = (MASK shl shift).inv()
-      return MicroTrace((value and clearMask) or (safeVal.micros shl shift))
+      return MicroTag4((value and clearMask) or (safeVal.micros shl shift))
    }
 
    fun get1(): Micros = ((value ushr 0) and MASK).us
@@ -34,24 +34,18 @@ value class MicroTrace(val value: Long = 0L) {
    fun get3(): Micros = ((value ushr 32) and MASK).us
    fun get4(): Micros = ((value ushr 48) and MASK).us
 
-   fun maxValue() = MAX_SLOT_VALUE
-
    private fun getStr(duration : Micros) = if (duration == MAX_SLOT_VALUE) "--" else duration.micros.toString()
-   private fun getRaw(duration : Micros) = duration.micros
 
-   fun toDebugString() = "binary : [${value.toBinaryString(16)}]\nvalues : [${getRaw(get1())}, ${getRaw(get2())}, ${getRaw(get3())}, ${getRaw(get4())}]"
    override fun toString() = "[${getStr(get1())}, ${getStr(get2())}, ${getStr(get3())}, ${getStr(get4())}]"
+   fun toDebugString() = "binary : [${value.toBinaryString(16)}]\nvalues : ${toString()}"
 }
 
-fun Long.toSplitTimer4() = MicroTrace(this)
-
 fun main() {
-   val timer = MicroTrace(Long.MAX_VALUE)
+   val timer = MicroTag4()
       .set1(11.us)
       .set2(22.us)
 //      .set3(33.us)
       .set4(45.us)
 
-   println("timer : $timer")
-//   println(timer.toDebugString())
+   println(timer.toDebugString())
 }

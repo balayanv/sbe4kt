@@ -917,14 +917,106 @@ If we were to use a very compact json for this and efficient ASCII encoding.
 We would have `110` bytes instead of `40` (63% more compact), 
 and we would waste time serializing/deserializing this vs 0 serialization needed with SBE.
 
-### Recording packed timestamps MicroTrace
+### Recording packed timestamps MicroTag4
 
 Lets assume we know the starting timestamp of an event we want to track as it travels trough various services.
-We could use a single `int64` to record 4 `uint16` durations (representing microseconds).
+We could use a single `int64` to record 4 `uint16` durations (representing microseconds), each one would have maximum value of 65535 microseconds or 65 milliseconds. This means that if we have a starting timestamp and none of our measurements after that are more than 65ms away we could measure 4 * 65 = 260ms range with microsecond precision only using single `int64`.
+
+For a low latency system this range is more than enough, its enough for most regular systems too. Lets demonstrate how simple `MicroTag4` value type would be. The goal here is to have cheap cost when writing into one of the 4 slots... it is irrelevant how "expensive" rebuilding the timestamps would be becaue presumably at that point our event is off the hot path.
 
 ```kotlin
+fun main() {
+   val timer = MicroTag4(Long.MAX_VALUE)
+      .set1(11.us)
+      .set2(22.us)
+//      .set3(33.us)
+      .set4(45.us)
 
+   println(timer.toDebugString())
+}
 ```
+This will give us the following output.
+
+```text
+binary : [1011010000000000 1111111111111111 0110100000000000 1101000000000000]
+values : [11, 22, --, 45]
+```
+Note that `--` here means that either value was never recorded (maybe due to a bug or clocks are drifted apart) or it was more than 65ms... either way in such case anything beyond that value is not usable since each next value is relative to previous one (45 is a throwaway value).
+
+Now with this utility we can take 1 nanosecond precision and 4 microsecond precision timestamps of our Trade event as it travels trough processes.
+
+```kotlin
+@SBE
+data class Trade(
+  var id: TimeId,
+  @META(tags = ["id", "PublishedToExhaust", "DeserializedOnMDS", "PublishedViaWS", "MarkedConsumed"])
+  var tags: MicroTag4,
+  var symbol: SymbolStr64,
+  var price: FPD,
+  var amount: FPD,
+)
+
+fun main() {
+  val time = TimeId.now().tag(77)
+
+  val trade = newTrade(
+    id = time,
+    tags = MicroTag4(),
+    symbol = SymbolStr64.from("BTC_USD"),
+    price = FPD.from(78000),
+    amount = FPD.from(1),
+  )
+
+  "SIMULATING A TRADE EVENT GOING TROUGH VARIOUS PROCESSES IN A SYSTEM".log()
+  "trade event was created                   : $trade".log()
+  "trade event leaving the exhaust service   : ${trade.recordPublishedToExhaust(time.add(10.us))}".log()
+  "trade event deserialized on MDS           : ${trade.recordDeserializedOnMDS(time.add(20.us))}".log()
+  "trade event published via WS              : ${trade.recordPublishedViaWS(time.add(30.us))}".log()
+  "trade event was marked consumed           : ${trade.recordMarkedConsumed(time.add(50.us))}".log()
+
+  "CHECKING IF RECORDED PACKED TIME DIFFS UNPACK INTO PROPER TIMESTAMPS".log()
+  "getTimePublishedToExhaust  : ${trade.getTimePublishedToExhaust()}".log()
+  "getTimeDeserializedOnMDS   : ${trade.getTimeDeserializedOnMDS()}".log()
+  "getTimePublishedViaWS      : ${trade.getTimePublishedViaWS()}".log()
+  "getTimeMarkedConsumed      : ${trade.getTimeMarkedConsumed()}".log()
+
+  trade.printSbeLayout()
+}
+```
+The code generator uses the first `id` to know which field to use as the `anchor`. Second value `PublishedToExhaust` uses `id` to build its timestamp, 3rd value/tag `DeserializedOnMDS` uses `PublishedToExhaust` as its anchor. Each depends on previous one. If one of these timestamps is more than 65ms away or never set then our telemetry systems should be smart enough to discard or register an issue associated with this.
+
+
+```text
+SIMULATING A TRADE EVENT GOING TROUGH VARIOUS PROCESSES IN A SYSTEM
+trade event was created                   : Trade(id=1770225351100000077, tags=[0, 0, 0, 0], symbol=BTC_USD, price=78000, amount=1)
+trade event leaving the exhaust service   : Trade(id=1770225351100000077, tags=[10, 0, 0, 0], symbol=BTC_USD, price=78000, amount=1)
+trade event deserialized on MDS           : Trade(id=1770225351100000077, tags=[10, 10, 0, 0], symbol=BTC_USD, price=78000, amount=1)
+trade event published via WS              : Trade(id=1770225351100000077, tags=[10, 10, 10, 0], symbol=BTC_USD, price=78000, amount=1)
+trade event was marked consumed           : Trade(id=1770225351100000077, tags=[10, 10, 10, 20], symbol=BTC_USD, price=78000, amount=1)
+CHECKING IF RECORDED PACKED TIME DIFFS UNPACK INTO PROPER TIMESTAMPS
+getTimePublishedToExhaust  : 1770225351100010077
+getTimeDeserializedOnMDS   : 1770225351100020077
+getTimePublishedViaWS      : 1770225351100030077
+getTimeMarkedConsumed      : 1770225351100050077
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ Trade (totalSize = 48 bytes)                                                        │
+├────────┬──────────┬─────────────────────────┬──────────┬──────┬─────────────────────┤
+│ Offset │ Field    │ Type                    │ SBE Type │ Size │ Value               │
+├────────┼──────────┼─────────────────────────┼──────────┼──────┼─────────────────────┤
+│ 0      │ [HEADER] │ Header                  │          │ 8    │ 40|1|1|0            │
+│ 8      │ id       │ TimeId                  │ int64    │ 8    │ 1770225351100000077 │
+│ 16     │ tags     │ MicroTag4               │ int64    │ 8    │ [10, 10, 10, 20]    │
+│ 24     │ symbol   │ SymbolStr64             │ int64    │ 8    │ BTC_USD             │
+│ 32     │ price    │ PackedFixedPointDecimal │ int64    │ 8    │ 78000               │
+│ 40     │ amount   │ PackedFixedPointDecimal │ int64    │ 8    │ 1                   │
+└────────┴──────────┴─────────────────────────┴──────────┴──────┴─────────────────────┘
+```
+All these value classes get inlined, and all these timestamp get/set operations boil down into couple of simple instructions.
+
+The purpose of these niche value types and features is to demonstrate that you can easily do complicated things while not complicating your serialization layer AND making your code more readable (`record${tag}` methods and equivalent `getTime${tag}` methods are all generated and require no manual coding). We now have 5 very percise full timestamps only using 16 bytes. Each timestamp carries service specific tag `77` in this case. 
+
+You can very easily add a special IR type which recognises java DateTime and treats it as a single long in SBE layer, converting back to DateTime when decoding (but then you might wonder what to do in flyweights).
+
 
 ### Structs/Composite types
 
@@ -1053,7 +1145,8 @@ sometimes there are more efficient ways to implment these.
 
 ### Using union types
 
-This is one of the features that is quite frequently used in other systems.
+This is one of the features that is quite frequently used in other systems. 
+If you use SBE you most likely have a method that adds 4 bytes representing what the payload is then uses actual gneerated Decoders to extract the payload (and vice versa).
 In protobuf this is known as `oneof`, when your wrapper type can have only one of the specified types as payload.
 
 Here is an example of using union types.
@@ -1197,9 +1290,11 @@ IR types are sealed hence shenever you have some conditional logic use exhaustiv
 14. [x] support `composite` types via `@SBE(isStruct=true)`
 15. [x] add support for nesting `@SBE` messages
 16. [x] add support for unions via `sealed classes`
-17. [ ] add support for nullability
-18. [ ] add support for `compactFlags` nullability + boolean flags stored via bitset `sbe:set`
-19. [ ] add support for `version`, `since`
+17. [ ] add support for packed tracing
+18. [ ] add support for DateTime as an example
+19. [ ] add support for nullability
+20. [ ] add support for `compactFlags` nullability + boolean flags stored via bitset `sbe:set`
+21. [ ] add support for `version`, `since`
 
 ## Features i dont really need
 
@@ -1225,8 +1320,10 @@ IR types are sealed hence shenever you have some conditional logic use exhaustiv
 4. [ ] using int8/int16 directly instead of sbe enum? is there a performance overhead when using sbe enums?
 5. [ ] why is sbe using short when underlying is byte?
 6. [ ] when not using String but CharSequence fw could keep instance of StringBuilder for getter invocations.
-7. [ ] printSbeStructure() for structs? or print it when printed for a message...
+7. [ ] printSbeStructure() for structs? or print it when printed for a message.
 8. [ ] maybe i should make str64 types just add `S64` instead of `Str64`
+9. [ ] union support when one of types are structs is messy, needs revisit and proper solution.
+10. [ ] make validation more strict since @SBE and @META tags have multiple purposes, user can create nonsensical combinations of arguments (fail fast)
 
 ## Features to experiment with
 

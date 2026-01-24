@@ -35,9 +35,10 @@ annotation class META(
     */
    val oneOf: Array<KClass<*>> = [],
 
+
    /**
-    * Milestones at which point measurements taken.
-    * Order is matched with SplitTimer slots.
+    * Tags at which point measurements taken.
+    * Order is matched with MicroTag4 slots.
     */
    val tags : Array<String> = [],
 ) {

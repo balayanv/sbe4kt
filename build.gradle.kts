@@ -44,7 +44,7 @@ dependencies {
 }
 
 application {
-   mainClass.set("example.UnionsKt")
+   mainClass.set("example.ExampleKt")
    applicationDefaultJvmArgs = listOf(jvmUnsafeAccessArg)
 }
 

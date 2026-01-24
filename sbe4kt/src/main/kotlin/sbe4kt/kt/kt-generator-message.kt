@@ -25,6 +25,7 @@ internal fun KSP.generateKotlinExtensionsForMessage(
    val encodersSection = generateEncodersSection(message)
    val flyweightsSection = generateFlyweightsSection(message)
    val utilsSection = generateUtilsSection(message)
+   val microTagSection = generateMicroTagSection(message)
 
    val result = """
       |@file:Suppress("unused")
@@ -37,6 +38,8 @@ internal fun KSP.generateKotlinExtensionsForMessage(
       |$flyweightsSection
       |
       |$utilsSection
+      |
+      |$microTagSection
       |""".trimTemplate()
 
    file.bufferedWriter().use { it.write(result) }

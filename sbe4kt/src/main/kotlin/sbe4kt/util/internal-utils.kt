@@ -101,6 +101,14 @@ internal fun KSAnnotation?.size() = supplyOrDefaultTo(-1) { this!!.arguments.fin
 // this is fragile but i dont know what the heck is the api to actually extract the Enum value of the annotation argument...
 internal fun KSAnnotation?.encoding() = supplyOrDefaultTo(Encoding.ASCII) { Encoding.valueOf(this!!.arguments.find { it.name!!.asString() == "encoding" }!!.value.toString().removePrefix("Encoding.")) }
 
+internal fun KSAnnotation?.tags(): List<String> {
+   if (this == null) return emptyList()
+   val arg = arguments.find { it.name!!.asString() == "tags" } ?: return emptyList()
+   @Suppress("UNCHECKED_CAST")
+   val value = arg.value as? ArrayList<String> ?: return emptyList()
+   return value.toList()
+}
+
 internal fun KSAnnotation?.oneOf(): List<KSClassDeclaration> {
    if (this == null) return emptyList()
    val arg = arguments.find { it.name!!.asString() == "oneOf" } ?: return emptyList()
