@@ -1,17 +1,20 @@
-package example
-
-import sbe4kt.META
-import sbe4kt.SBE
-
-
-@SBE(usePadding = true)
-data class Example(
-   @META(size = 16)
-   var f1: String,
-)
-
-fun main() {
-
-   randomExample().printSbeLayout()
-
-}
+//package example
+//
+//import sbe4kt.SBE
+//
+//@SBE
+//data class Wrapper(
+//   var f1: Int,
+////   var f2: XY,
+//)
+//
+//@SBE(isStruct = true)
+//data class XY(
+//   var x: Int,
+//   var y: Int,
+//)
+//
+//
+//fun main() {
+//   randomWrapper().printSbeLayout()
+//}
