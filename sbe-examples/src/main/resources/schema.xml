@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<sbe:messageSchema xmlns:sbe='http://fixprotocol.io/2016/sbe'
+                   package='example.sbe'
+                   id='1'
+                   version='0'
+                   semanticVersion='5.2'
+                   description='Example SBE Schema'
+                   byteOrder='littleEndian'>
+   <types>
+      <composite name='messageHeader' description='Message identifiers and length of message root'>
+         <type name='blockLength' primitiveType='uint16'/>
+         <type name='templateId' primitiveType='uint16'/>
+         <type name='schemaId' primitiveType='uint16'/>
+         <type name='version' primitiveType='uint16'/>
+      </composite>
+
+      <set name="OrderUpdateFlags" encodingType="uint8">
+         <choice name="isSetF1">0</choice>
+      </set>
+   </types>
+
+   <sbe:message name="OrderUpdate" id="1" blockLength="8">
+      <field name="flags" id="2" type="OrderUpdateFlags"/>
+      <field name="f1" id="1" type="int32" presence="optional"/>
+   </sbe:message>
+
+</sbe:messageSchema>
