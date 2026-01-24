@@ -1,4 +1,21 @@
-package sbe4kt.util
+@file:Suppress("unused")
+
+package sbe4kt.lib
+
+import com.google.devtools.ksp.symbol.KSClassDeclaration
+import sbe4kt.ir.Struct
+import kotlin.random.Random
+
+inline fun <reified E : Enum<E>> randomValue(): E {
+   val values = enumValues<E>()
+   return values[Random.nextInt(values.size)]
+}
+
+inline fun <reified E : Enum<E>> defaultValue(): E {
+   return enumValues<E>()[0]
+}
+
+// CSV Table Utilities
 
 typealias Header = String
 typealias Headers = ArrayList<String>
@@ -116,3 +133,13 @@ class CSV(
       this.info = info
    }
 }
+
+fun CharSet.randomStr(length : Int) = (1..length).map { this.chars.random() }.joinToString("")
+fun Random.nextStr(length: Int) = (1..length).map { nextChar() }.joinToString("")
+fun Random.nextChar() = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[nextInt(62)]
+fun Random.nextShort() = this.nextInt().toShort()
+
+fun Boolean.convertToByte(): Byte = if (this) 1.toByte() else 0.toByte()
+fun Byte.convertToBoolean(): Boolean = this.toInt() != 0
+
+fun Long.toBinaryString(chunkSize : Int = 8) = this.toULong().toString(2).padStart(64, '0').reversed().chunked(chunkSize).reversed().joinToString(" ")
