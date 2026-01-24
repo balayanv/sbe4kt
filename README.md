@@ -1,13 +1,10 @@
 # The Problem
 
 SBE is very simple in how it works but it exposes low level details of serialization to developers. 
-Without experience, it inevitably creates abominable codebases where you see encoders/decoders 
-flying around in dependency injection frameworks, 
-or part of the serialization happening with one framework/manually and another part with SBE codecs. 
-For example nearly every system i saw using SBE has manual code serializing message type into int and mannually allocating Decoders, 
-to deserialize what is comming in the payload... basic union support would remove the need for this.
+Without experience, it inevitably creates codebases where you see encoders/decoders 
+flying around in dependency injection frameworks, part of the serialization happening with one framework/manually and another part with SBE codecs. This creates fragile systems that are miserable to work with and completely defeats the purpose of SBE.
 
-This creates fragile systems that are miserable to work with and completely defeats the purpose of SBE.
+Also i do not like xml.
 
 # SBE4KT
 
@@ -105,7 +102,7 @@ build/generated/
 │   └── main/
 │       ├── kotlin/
 │       │   └── example/
-│       │       └── TradeExtensions.kt         // kotlin codegen
+│       │       └── TradeExtensions.kt          // kotlin codegen
 │       └── resources/
 │           └── sbe-schema.xml                  // sbe schema
 └── sbe/
@@ -120,6 +117,7 @@ build/generated/
                 └── TradeEncoder.java
 ```
 
+`sbe-schema.xml` can be added to your vcs to detect/verify changes.
 Now with the generated code we can do things like this.
 
 ```kotlin
@@ -129,7 +127,7 @@ which will print out a nice tabular breakdown of our message layout
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
-│ Trade (totalSize = 44 bytes)                                        │
+│ Trade (totalSize = 44 bytes)                                         │
 ├────────┬───────────┬────────┬──────────┬──────┬──────────────────────┤
 │ Offset │ Field     │ Type   │ SBE Type │ Size │ Value                │
 ├────────┼───────────┼────────┼──────────┼──────┼──────────────────────┤
@@ -141,8 +139,8 @@ which will print out a nice tabular breakdown of our message layout
 │ 40     │ symbol    │ Int    │ int32    │ 4    │ -53302703            │
 └────────┴───────────┴────────┴──────────┴──────┴──────────────────────┘
 ```
-We can see that our message is 44 bytes in size, 8 of which are used for headers (standard for sbe),
-We can see the offsets and sizes of each field and actual values at the moment we printed this.
+We can see that our message is 44 bytes in size, 8 of which are used for headers (standard for sbe?),
+also offsets and sizes of each field and actual values at the moment we printed this.
 
 You'll notice that `symbol` field which was originally at second position was moved to the end.
 Thre reason for that is alignment. Placing fields at multiples of 8 bytes is hardware friendly, 
@@ -151,7 +149,7 @@ and one of the easiest ways to achive such alignment is to put biggest fixed siz
 Otherwise all our fields after symbol would have been misaligned. 
 Because it reordered it to last position, all our fields are aligned. 
 
-To encode/decode data you can simply use the generated extension functions and never deal with SBE encoder/decoders.
+To encode/decode data you can simply use the generated extension functions and never deal directly in SBE encoder/decoders.
 
 ```kotlin
    // lets create a random instance to serialize and deserialize
@@ -178,13 +176,13 @@ To encode/decode data you can simply use the generated extension functions and n
 
 Note that at all points you are in complete control of what buffers and what instances are being used, 
 you can (and should) use these methods to completely avoid generating any objects. 
-Encoder/Decoders are actually very simple classes and can often be inlined.
+Encoder/Decoders are actually very simple classes and can often be inlined as JIT does its magic.
 
 But we can do much better. 
 
 ```kotlin
    // we can create a flyweight which directly works with the buffer 
-   // all get/set operations are directly happening on the buffer
+   // all get/set operations are directly working with the buffer
    val fw = TradeRW()
 
    // we can directly write data to the buffer
@@ -214,30 +212,32 @@ But we can do much better.
 ```
 
 Flyweights reuse the instances of encoders/decoders and they do less work compared to 
-normal `encode/decode` functions because they avoid the `wrap()` that has to be performed on each invcation.
-Unlike `encode/decode` the flyweight only has to `wrap()` the buffer once. 
+normal `encode/decode` functions because they avoid the `wrap()` that has to be performed on each invcation. 
+Flyweight only has to `wrap()` the buffer once per jump. 
+
 We also have specialized `ReadOnly/WriteOnly` variants of flyweights which further avoid excessive instructions. 
 If all you do is read from a flyweight it makes no sense to do `encoder.wrap()`.
-Flyweights are more efficient than `encode/decode` functions (which still are 0 garbage but do few more instructions).
 
-These are the basics (the overall high level interface) of the library, do follow the instructions of [Tutorial](#full-tutorial) section to get familiar with [all the features](#features-supported) of the library.
+Flyweights are more efficient than `encode/decode` functions (which are still 0 garbage but do few more instructions).
+
+These are the basics (the overall high level interface) of the library, do follow the instructions of [Tutorial](#full-tutorial) section to get familiar with [all the features](#core-features) of the library.
 
 ---
 ## Recommendations, Conventions and Defaults
 
 There are some conventions and defaults that you should be aware of, most of these are optional, but they are made defaults for a reason (do not expect good performance if you choose to deviate).
 
-* Always define your message ids in real systems (autogen ids are for convenience only).
+* Always define your message ids in real systems (autogen ids are for convenience only)
   * You can enforce it via `requireMessageIds`
 
 * All fields of your class MUST be mutable.
-  * no java `records`, immutability is idiotic/disasterous for performance (with very few exceptions).
+  * no java `records`, immutability is idiotic/disasterous for performance (with very few exceptions)
 
 * All fields are PREFERRED to be NOT nullable
   * SBE does not keep information if the field was set or not
   * If you absolutely want nullability use `allowNullableTypes=true`
   * If you have many nullable fields and/or booleans you SHOULD use `compactFlags`
-  * You SHOULD enforce non nulls via `requireNotNulls`
+  * I RECOMMEND enforce non nulls via `requireNotNulls` at module level
 
 * All messages are PREFERRED be fixed sized.
   * The tradoff of functionality and performance for using var length fields is not worth it
@@ -248,7 +248,7 @@ There are some conventions and defaults that you should be aware of, most of the
     * fixed size strings (when `str64` is not enough)
     * fixed size collections (list/map/set/arrays)
   * If you absolutely want variable length fields use `allowVarLengthFields=true`
-  * You SHOULD enforce fixed size only via `requireFixedLength`
+  * I RECOMMEND enforce fixed size only via `requireFixedLength` at module level
 
 * If you want to enforce padding you can use `usePadding=true`
   * this also adds padding to the end of the message, so you can append many in one buffer
@@ -261,16 +261,17 @@ There are some conventions and defaults that you should be aware of, most of the
   * This pollutes the namespace and can create issues if you have many annotated messages.
 
 * Best serialization is NO serialization, since Flyweights allow you to directly interact with buffer, there is 0 time spent serializing/deserializing.
-  * Your message is ready to work with as soon as its in the buffer, and its ready to be sent at any point because its already in the buffer.
+  * Your message is ready to work with as soon as its in the buffer, and its ready to be sent at any point
   * Flyweights are fantastic in cases where your business logic doesnt actually do many get/sets or only needs to access fraction of the messages content.
   * The performance difference of not doing any serialization at all can be immense.
-  * Even if you do need to `encode/decode` into objects using flyweight api and reusing objects will be slightly faster than `encode/decode` directly.
+  * Even if you do need to `encode/decode` into objects using flyweight api and reusing objects should be slightly faster than `encode/decode` directly.
   * Consider this the recommended default.
 
 * Summery
   * Fixed sized fields/messages everywhere (its not that hard, see in the full tutorial)
   * Discourage nullability
   * Directly read/write to buffers, no need to allocate objects at all
+  * Prefer structs (composites) over `sbe:message`es
 
 
 ---
@@ -279,12 +280,10 @@ There are some conventions and defaults that you should be aware of, most of the
 Make sure you have explored [Quick Start](#quick-start) section before going trough this tutorial. The examples here are deliberately not in source so you try these yourself. 
 It wont take much time to go trough the full tutorial, so i encourage you to do so. 
 
-Now that you know the basics we can explore all the individual features in detail.
-
 ### Alignment/Padding
 
 Alignment is very useful when you are willing to get better performance over compact memory layout.
-By default fields will be ordered in descending order by size, this naturally achieves alignment for most of the fields,
+By default fields will be ordered in descending order by size, this naturally achieves alignment for most of the fields.
 
 ```kotlin
 @SBE
@@ -293,6 +292,7 @@ data class Msg(var f1: Byte, var f2: Int, var f3: Long)
 fun main() { randomMsg().printSbeLayout() }
 ```
 You should see that the order is different than what was specified in definition.
+
 ```text
 ┌────────────────────────────────────────────────────────────────────┐
 │ Msg (totalSize = 21 bytes)                                         │
@@ -313,6 +313,7 @@ For any `@SBE` annotated type you can use padding to achive alignment by using `
 @SBE(usePadding = true)
 data class Msg(var f1: Byte, var f2: Int, var f3: Long)
 ```
+
 Now you will see that all fields are aligned to multiple of 8 bytes and message ends with a padding.
 This is done such that next message when written after this will start at aligned position.
 
@@ -342,7 +343,7 @@ The sbe schema will be changing accordingly to use offset attribute to achieve a
 </sbe:message>
 ```
 
-Note that blockLength does not include the header size (which is 8).
+Note that `blockLength` does not include the header size (which is 8).
 
 ### Enums
 
@@ -367,7 +368,7 @@ This will generate
 
 ### Value classes 
 
-You can use value clases as well. Note that these get inlined into their backing type almost always, unless you use the Value type as reference type.
+You can use value clases as well.
 
 ```kotlin
 @JvmInline
@@ -376,7 +377,8 @@ value class SomeValueClass(val underlying : Int)
 @SBE
 data class Msg(var f1: SomeValueClass)
 ```
-Because value classes effectively inline into whatever underlying field they have at SBE/bytecode level its simply an int.
+Because value classes effectively inline into whatever underlying field they have 
+at SBE/bytecode level its simply an int.
 
 ```xml
 <sbe:message name='Msg' id='1' description='Msg'>
@@ -384,8 +386,9 @@ Because value classes effectively inline into whatever underlying field they hav
 </sbe:message>
 ```
 
-However in the generated code we preserve it and convert accordingly.
-This is an important feature that will allow us to efficiently work with fixed point decimals, fixed strings later on.
+The generated code we preserve it and "convert" accordingly.
+This is an important feature that will allow us to efficiently work with fixed point decimals, 
+fixed strings and do many other tricks later...
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -441,18 +444,17 @@ The generated code naturally handles it correctly.
 fun f1() = SomeOtherValueClass(SomeValueClass(SomeEnum.entries[decoder.f1().ordinal]))
 ```
 
-It is important to keep the support for different types generic. IR.Leaf types have granular interface methods,
-that describe how to extract a value, how to convert your value to sbe and back etc...
-
-Code generation takes advantage of these generic methods of composing statements and recursion does the rest.
+It is important to keep the support for different types generic. `IR.Leaf` types have granular interface methods,
+that describe how to extract a value, how to convert your value to sbe and back etc. 
+Code generation takes advantage of these generic methods to compose statements and recursion does the rest.
 
 ### Flyweights
 
 Flyweights in this library have 2 major objectives.
 * Directly read/write to buffer with as few instructions as possible.
-* Avoid any allocations
+* Avoid any allocations while doing the above (optional)
 
-Looking at `Trade` example we can see what the flyweight really does when we work with it.
+Looking at `Trade` example we can see what the generated flyweight really does when we work with it.
 
 ```kotlin
    fun id(id: Long) = apply { encoder.id(id) }
@@ -471,9 +473,9 @@ Looking at `Trade` example we can see what the flyweight really does when we wor
 ```
 
 It no longer does any `wrap()` because it is already correctly positioned. 
-That is the correct way to use it.
+
 Since you know exact sizes of message types (if you follow the recommended approach). 
-You can create ring buffers wich have flyweights of given union type, and you can directly read write.
+You can create ring buffers which have flyweights of given union type, and you can directly read write.
 
 There are 3 variations of these flyweights `RW`, `R`, `W`.
 So if you have a different type of worker that mostly reads or writes or you do not want to expose an interface that can write, 
@@ -497,7 +499,7 @@ object Symbol : CharSet("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")
 This effectively creates a unique charset singletone, 
 the KSP processor will generate a value class `SymbolStr64` specific to this codec.
 Now you can use your custom encoding to store short strings like `XBTUSDTH26` (a btc/usd futures instrument)
-into a single `int64` field.
+into as single `int64` field.
 
 ```kotlin
 fun main() {
@@ -506,18 +508,18 @@ fun main() {
 }
 ```
 
-This will print very detailed information about your string.
+This will print detailed information about your string.
 
 ```text
 XBTUSDTH26 (10 characters) CodecStr64(charset=CharSet(chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'), maxCap=10, bitWidth=6)
 [0000 100001 101110 000100 001010 001000 110010 101010 001010 010000 000110]
 ```
-From this string you can see the charset you define allows for maximum 10 characters.
+From this string you can see that your charset allows for maximum 10 characters.
 `Str64` codec uses null termination to know if the string ended, but if the value is long enough all bits are used for the value. 
 
-We can see that the last 4 bits are unused (wasted), this is because our `bitWidth=6`, so it takes 6 bits to encode a single character. So we only have 60 effecively used bits.
+We can see that the last 4 bits are unused (wasted), this is because our `bitWidth=6`, so it takes 6 bits to encode a single character, thus we only use 60 bits.
 
-If we use smaller codec we can fit more or be more effective. 
+If we use smaller codec we can fit a lot more. 
 
 ```kotlin
 object Symbol : CharSet("ABCDEFGHIJKLMNO")
@@ -540,7 +542,7 @@ Because this generated type `SymbolStr64` is a value class it means we can use i
 Now our trade example can be improved.
 
 Also because this value type is unique to your encoding, at compile time you cannot mix it with some other value type string,
-even though both of them are `long`s they are not interchanable...
+even though both of them are `long`s they are not interchanable (typealiases are). 
 
 Lets use it in our `Trade` message type.
 
@@ -561,6 +563,8 @@ fun main() {
    println("max characters in symbol : ${SymbolStr64.codec.maxCap}")
 }
 ```
+
+SBE simply stores an `int64` while all our interfaces use `SymbolStr64` (which also implements CharSequence)...
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -595,12 +599,12 @@ data class Trade(
 )
 ```
 
-In which case it will use a `char[]` of size 20 in SBE schema.
+In which case it will use a `char[]` of size 20 in SBE schema like this.
 
 ```xml
 <type name='CharArray20' primitiveType='char' length='20' characterEncoding='US-ASCII'/>
 ```
-By default SBE uses ASCII.
+By default SBE uses ASCII (1 byte per character).
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -651,8 +655,7 @@ To avoid collisions it will add a `U` next to the type to indicate the encoding.
 
 Downside of using String is that your flyweight types create garbage when you invoke the getter of the field.
 
-TODO : this is something that needs to be addressed via some type that can wrap a buffer and represent a fixed size string (i'm sure there is soemthing like that out there).
-
+TODO : this is something that needs to be addressed via some type that can wrap a buffer and represent it as CharSequence (i'm sure there is soemthing like that out there).
 TODO : alternative use CharSequence then flyweight can keep a reusable StringBuilder which will be populated on each get... need to think whats the best approach.
 
 ### Fixed Point Decimal Arithmetic (FPDN)
@@ -660,17 +663,24 @@ TODO : alternative use CharSequence then flyweight can keep a reusable StringBui
 We can further improve our example by using one of our FPD types.
 There are 2 kinds of these in `FixedPointDecimal.kt`.
 
-The simplest kind is the static fixed point decimals (FPDN where N is number from 0-15). These are equivalent of using `long` in trading systems with implicit knowledge of what the scale is. Problem of that approach is that its easy to make mistakes such as mathematical operations whith values that actually have different scale, and its hard to read the code. Value classes help us with this.
+The simplest kind is the static fixed point decimals (FPDN where N is number from 0-15). 
+These are equivalent of using `long` in trading systems with implicit knowledge of what the scale is. 
+Problem of that approach is that its easy to make mistakes such as mathematical operations 
+whith values that actually have different scale (and its hard to read the code). 
+Value classes help us with this.
 
-Lets look at FPD5 for example (a fixed point decimal with 5 decimal points).
+Lets look at FPD5 for example (a fixed point decimal with implied scale of 5 decimal points).
 
 ```kotlin
+// i use such type aliases to make it easier to use while not limiting myself to a "compact" less descriptive name
 typealias FPD5 = FixedPointDecimal5
 
 @JvmInline
 value class FixedPointDecimal5(val value: Long)
 ```
-Using it is quite simple. In generally any method with `Exact` suffix will do extra checks and throw exceptions if something is wrong. Non exact methods are the unsafe variants. You should make sure that any kind of validation is done before those are invoked.
+Using it is quite simple. In general any method with `Exact` suffix will do extra checks and throw exceptions if something is wrong. 
+Non exact methods are the unsafe variants. 
+You should make sure that any kind of validation is done before those are invoked.
 
 ```kotlin
 val f5 = FPD5.fromExact("123.456789")
@@ -678,8 +688,8 @@ println(f5)
 println(f5.debugToString())
 println(f5.debugValueRange())
 ```
-We will see how it actually represents the value.
-And what range of values is accessible.
+I find `debugValueRange()` useful for developers who are new to FPD types to accurately gauge which scale to use
+and what limitations to expect.
 
 ```text
 123.45678
@@ -701,7 +711,9 @@ println(a.debugToString())
 println(b.debugToString())
 println(c.debugToString())
 ```
+
 This will produce an expected output.
+
 ```text
 1111.11111, scale : 5
 22.22222, scale : 5
@@ -719,6 +731,7 @@ System.out.println(FixedPointDecimal5.debugToString-impl(a));
 System.out.println(FixedPointDecimal5.debugToString-impl(b));
 System.out.println(FixedPointDecimal5.debugToString-impl(c));
 ```
+
 The implementation of it is simple addition since we know both are of the same scale.
 
 ```kotlin
@@ -731,6 +744,10 @@ val a = FPD5.fromExact("1111.11111")
 val b = FPD4.fromExact("22.22222")
 val c = a + b // fails to compile
 ```
+
+Note that if you use value type in generics (some collections etc) jvm will have to use an actual object wrapper.
+You can easily see such cases by decompiling into bytecode. Value classes are agressively inlined whenever possible.
+
 
 ### Packed FixedPointDecimal (FPD)
 
@@ -750,7 +767,7 @@ and 60 bits are used for the value. It effectively trades a bit of performance (
 It is very close to performance of using normal `long` or `FPDN` types 
 but it is more dynamic beacuse it can automatically convert (upscale) lower scale value to get operations done. 
 
-If you run the same example but using packed FPD you wont see issues at compile time.
+If you run the same example but using packed FPD you will NOT see issues at compile time.
 
 ```kotlin
 val a = FPD.fromExact("1111.11111")
@@ -762,7 +779,7 @@ println(b.debugToString())
 println(c.debugValueRange())
 ```
 
-will correctly upsacle the `b` variable then perform sum operation.
+This will correctly upsacle the `b` variable then perform sum operation.
 You will also notice that we have smaller range, but its still enough for all financial usecases (when used correctly).
 Be careful when operating at very high scale, since your range is narrower.
 
@@ -772,7 +789,7 @@ Be careful when operating at very high scale, since your range is narrower.
 1133.33311, scale : 5, range : [-5764607523034.23488, 5764607523034.23487], usableBits : 60
 ```
 
-So now we can improve our Trade Type.
+So now we can improve our Trade Type further.
 
 ```kotlin
 @SBE
@@ -784,6 +801,7 @@ data class Trade(
    var amount: FPD,
 )
 ```
+
 Now we have percise arithmetic in trade class.
 
 ```text
@@ -801,7 +819,7 @@ Now we have percise arithmetic in trade class.
 └────────┴───────────┴─────────────────────────┴──────────┴──────┴──────────────────────┘
 ```
 For now all FPD types are signed, but its trivial to make unsigned variants.
-Kotlin already has UByte, UInt, ULong value types, a similar approach can be used here.
+Kotlin already has `UByte`, `UInt`, `ULong` value classes, a similar approach can be used here.
 
 ### UUIDs and timestamps
 
@@ -813,13 +831,13 @@ We are going to use nanoscale timestamps but use last 2 digits of them as identi
 If we make our timestamp generation unique on application level (which is trivial), the last 2 digits guarantee that its unique across many services (99 of them).
 
 In case of chronicle the id/tag is used for unique host (and random access file is used to CAS the value for any service running on the same host). 
-This type keeps it simple.
+This type keeps it simple (it works per application, not host).
 
 In my experience I hardly ever need more than 99 services in "core"... 
-If you want to you can easily modify this type to give you range of 999 
+But its easy to modify this type to give you range of 999 
 or use agrona equivalent to achieve same host level uniqueness.
 
-To use `TimeId` is quite trivial, here is a simple example demonstrating how it works 
+Using `TimeId` is quite trivial, here is a simple example demonstrating how it works 
 when we rapidly generate new ids (more frequently than our clock).
 
 Note if you want to take full advantage of the nanotime you need to use a good system clock, 
@@ -875,7 +893,7 @@ The intentional sleep there is to force our clock to reset the "counter".
 We have 10 million unique ids per second and can generate these until April 11, 2262.
 More than enough. Also nothing stops us from "reseting" the starting point of time since value class encapsulates it (so even 2262 is not really a limit).
 
-So we couold easily make our TimeId be the nanoseconds since 2020 and do some simple adjustments when getting unix time etc...
+So we could easily make our TimeId be the nanoseconds since 2020 and do some simple adjustments when getting unix time etc...
 
 As other value types this is a simple `long`, and perfectly valid timestamp at all times. 
 
@@ -920,9 +938,14 @@ and we would waste time serializing/deserializing this vs 0 serialization needed
 ### Recording packed timestamps MicroTag4
 
 Lets assume we know the starting timestamp of an event we want to track as it travels trough various services.
-We could use a single `int64` to record 4 `uint16` durations (representing microseconds), each one would have maximum value of 65535 microseconds or 65 milliseconds. This means that if we have a starting timestamp and none of our measurements after that are more than 65ms away we could measure 4 * 65 = 260ms range with microsecond precision only using single `int64`.
+We could use a single `int64` to record 4 `uint16` durations (representing microseconds), 
+each one would have maximum value of `65535` microseconds or `65` milliseconds. 
 
-For a low latency system this range is more than enough, its enough for most regular systems too. Lets demonstrate how simple `MicroTag4` value type would be. The goal here is to have cheap cost when writing into one of the 4 slots... it is irrelevant how "expensive" rebuilding the timestamps would be becaue presumably at that point our event is off the hot path.
+This means that if we have a starting timestamp and none of our measurements after that are more than 65ms away 
+we could measure `260ms` range with microsecond precision 4 times only using single `int64`.
+
+For a low latency system this range is more than enough, its enough for most regular systems too. 
+Lets demonstrate how simple `MicroTag4` value type would work.
 
 ```kotlin
 fun main() {
@@ -983,7 +1006,17 @@ fun main() {
   trade.printSbeLayout()
 }
 ```
-The code generator uses the first `id` to know which field to use as the `anchor`. Second value `PublishedToExhaust` uses `id` to build its timestamp, 3rd value/tag `DeserializedOnMDS` uses `PublishedToExhaust` as its anchor. Each depends on previous one. If one of these timestamps is more than 65ms away or never set then our telemetry systems should be smart enough to discard or register an issue associated with this.
+
+The code generator uses the first `id` to know which field to use as the `anchor`. 
+Second value `PublishedToExhaust` uses `id` to build its timestamp, 
+3rd value/tag `DeserializedOnMDS` uses `PublishedToExhaust` as its anchor. 
+Each depends on previous one so order matters. 
+
+If one of these timestamps is more than 65ms away or never set then telemetry systems should be smart enough 
+to discard or register an issue associated with this.
+
+We could create some parameter that instead of using previous tag to build next one uses id as anchor for each tag.
+In that case order does not matter but maximum measurement distance in time is 65ms (still forever in microsecond latency system).
 
 
 ```text
@@ -1011,12 +1044,17 @@ getTimeMarkedConsumed      : 1770225351100050077
 │ 40     │ amount   │ PackedFixedPointDecimal │ int64    │ 8    │ 1                   │
 └────────┴──────────┴─────────────────────────┴──────────┴──────┴─────────────────────┘
 ```
-All these value classes get inlined, and all these timestamp get/set operations boil down into couple of simple instructions.
+All these value classes get inlined, and all these timestamp get/set operations boil down into couple of additions/subtractions.
 
-The purpose of these niche value types and features is to demonstrate that you can easily do complicated things while not complicating your serialization layer AND making your code more readable (`record${tag}` methods and equivalent `getTime${tag}` methods are all generated and require no manual coding). We now have 5 very percise full timestamps only using 16 bytes. Each timestamp carries service specific tag `77` in this case. 
+The purpose of these niche value types and features is to demonstrate that you can easily do complicated things while not complicating your serialization layer 
+AND making your code more readable (`record${tag}` methods and equivalent `getTime${tag}` methods are all generated and require no manual coding). 
 
-You can very easily add a special IR type which recognises java DateTime and treats it as a single long in SBE layer, converting back to DateTime when decoding (but then you might wonder what to do in flyweights).
+We now have 5 very percise full timestamps only using 16 bytes. Each timestamp carries service specific tag (`77` in this case) and is effectively a unique id. 
 
+You can very easily add a special IR type which recognises java DateTime and treats it as a single long in SBE layer, converting back to DateTime when decoding into object.
+
+Note you cannot make accidental conversion mistakes between time units when using `TimeId` or `MicroTag4` because both of those use
+`Nanos`, `Micros`, `Millis` value types, which will not compile unless you properly convert units when needed.
 
 ### Structs/Composite types
 
@@ -1166,6 +1204,7 @@ data class Failure(var id: TimeId, var code: Int)
 data class Success(var id: TimeId, var result: Long)
 ```
 I'm still considering options but for now unions are stored as a composite.
+Another option is to declare each type in SBE but give them all same offset where the byte buffer is now...
 
 ```xml
 <composite name='resultUnion'>
@@ -1173,7 +1212,7 @@ I'm still considering options but for now unions are stored as a composite.
   <type name='data' primitiveType='uint8' length='24'/>
 </composite>
 ```
-The type is used as a discriminator and uses id of the message (thinking about what to do about structs).
+The type is used as a discriminator and uses id of the message (TODO what to do about structs, those dont have an id).
 
 ```xml
 <sbe:message name='Success' id='1' description='Success'>
@@ -1233,46 +1272,7 @@ fun main() {
 ```
 
 ---
-## Contributing
-
-KSP api is very flexible, all of the generated code and schemas are there for you to observe 
-and verify that they do exactly what you want them to do, it is very likely that you may want to add some specific features 
-for your own projects or modify the existing ones. 
-If you do something that is generic and will benefit the library please send a pull request.
-
-Few things to keep in mind. Stay in line with the principles mentioned above. Many of these choices are deliberate
-to discourage developers from misusing or building an unmaintainable mess.
-
-Generated code has no warnings or comments, keep it that way if you are going to contribute, 
-make the code self documenting, the method/field/variable names should be self-explanatory, 
-using long names is ok. Keep the code compact so it is maintainable.
-
-I recommend to always look at the generated sbe schema and class files first, sometimes you may copy the old version and diff with new generations.
-To debug the plugin while it is compiling your classes first run this in terminal (with correct jdk) `./gradlew clean run --no-daemon -Dorg.gradle.debug=true -Dkotlin.compiler.execution.strategy=in-process`,
-this runs Gradle in a mode where it expects a debugger to attach, then run `ksp_debug_idea` to actually attach a debugger.
-Now your breakpoints under `sbe4kt` module won't be ignored.
-
----
-## Code Structure
-
-Entry point is for the plugin is [Sbe4Kt.kt](sbe4kt/src/main/kotlin/sbe4kt/Sbe4Kt.kt), 
-It will detect all the classes annotated with [SBE.kt](sbe4kt/src/main/kotlin/sbe4kt/SBE.kt),  
-build an Intermediate Represenation of the Schema defined at [definitions.kt](sbe4kt/src/main/kotlin/sbe4kt/ir/definitions.kt),
-then generate SBE schema via [sbe-generator.kt](sbe4kt/src/main/kotlin/sbe4kt/sbe/sbe-generator.kt) 
-and kotlin extensions via [kt-generator.kt](sbe4kt/src/main/kotlin/sbe4kt/kt/kt-generator.kt).
-
-Anything that is of type `IR.Root` is a message root which recursively resolves the intermediate fields and their `IR.Leaf` types.
-Each IR type contains generic information ONLY. Methods/fields regarding its code generation, field sizes etc (anything that does not depend on context), 
-for example `Long` is a primitive type that has size of `8 bytes` such information is context independent and belongs in `IR.Leaf` implementation.
-
-Context information such as order of the fields, their ids, padding etc is all stored in separate two types `Schema` and `Field` which have references to their respective `IR` types.
-The final artifact after analysis of the inputs is instance of `Schema` it contains all the message roots and everything necessary for code/schema generation.
-
-Do not break this architecture, avoid hardcoding any conditional logic in generators. Schema instance should contain everything in normalized form for generators do their job.
-IR types are sealed hence shenever you have some conditional logic use exhaustive when statements, this way if new IR types are added later compiler will force you to address the missing logic.
-
----
-## Core Features
+## Core Features (current state of the library)
 
 1. [x] primitives support `Boolean`, `Char`, `Byte`, `Short`, `Int`, `Long`, `Float`, `Double`
 2. [x] support `usePadding` for optional alignment
@@ -1289,12 +1289,11 @@ IR types are sealed hence shenever you have some conditional logic use exhaustiv
 13. [x] add support for custom charset strings `str64`
 14. [x] support `composite` types via `@SBE(isStruct=true)`
 15. [x] add support for nesting `@SBE` messages
-16. [x] add support for unions via `sealed classes`
-17. [ ] add support for packed tracing
-18. [ ] add support for DateTime as an example
-19. [ ] add support for nullability
-20. [ ] add support for `compactFlags` nullability + boolean flags stored via bitset `sbe:set`
-21. [ ] add support for `version`, `since`
+16. [x] add support for unions
+17. [x] add support for tagging timestamp diffs in message (telemetry within message)
+18. [ ] add support for nullability (adds a bool isSet$field)
+19. [ ] add support for `compactFlags` nullability + normal boolean fields stored via bitset `sbe:set`
+20. [ ] add support for `version`, `since`
 
 ## Features i dont really need
 
@@ -1337,3 +1336,49 @@ IR types are sealed hence shenever you have some conditional logic use exhaustiv
     * this can be universal way to deal with "what if i need really big string in my message"
     * send many small ones until its done
   * many to many (IObservable<Req> - IObservable<Rep>)
+
+---
+## Contributing
+
+KSP api is very flexible, all of the generated code and schemas are there for you to observe
+and verify that they do exactly what you want them to do.
+
+Few things to keep in mind. Stay in line with the principles mentioned above. Many of these choices are deliberate
+to discourage developers from misusing or building an unmaintainable mess.
+
+Generated code has no warnings or comments, keep it that way if you are going to contribute,
+make the code self documenting, the method/field/variable names should be self-explanatory,
+using long names is ok, for very long names use `typealiases`. Keep the code compact so it is maintainable.
+
+I recommend to always look at the generated sbe schema and class files first,
+sometimes you may copy the old version and diff with new generations.
+
+To debug the plugin while it is compiling your classes first run this in terminal (with correct jdk)
+
+```bash
+./gradlew clean run --no-daemon -Dorg.gradle.debug=true -Dkotlin.compiler.execution.strategy=in-process
+```
+
+this runs Gradle in a mode where it expects a debugger to attach, then run `ksp_debug_idea` to actually attach a debugger.
+Now your breakpoints under `sbe4kt` module won't be ignored.
+
+---
+## Code Structure
+
+Entry point is for the plugin is [Sbe4Kt.kt](sbe4kt/src/main/kotlin/sbe4kt/Sbe4Kt.kt),
+It will detect all the classes annotated with [SBE.kt](sbe4kt/src/main/kotlin/sbe4kt/SBE.kt),  
+build an Intermediate Represenation of the Schema defined at [definitions.kt](sbe4kt/src/main/kotlin/sbe4kt/ir/definitions.kt),
+then generate SBE schema via [sbe-generator.kt](sbe4kt/src/main/kotlin/sbe4kt/sbe/sbe-generator.kt)
+and kotlin extensions via [kt-generator.kt](sbe4kt/src/main/kotlin/sbe4kt/kt/kt-generator.kt).
+
+Anything that is of type `IR.Root` is a message root which recursively resolves the intermediate fields and their `IR.Leaf` types.
+Each `IR.Leaf` type contains generic information ONLY.
+
+Context information such as order of the fields, their ids, padding etc is all stored in separate two types `Schema` and `Field` which have references to their respective `IR` types.
+
+Do not break this architecture, avoid hardcoding any conditional logic in generators.
+
+Schema instance should contain everything in normalized form for generators do their job.
+
+IR types are sealed hence whenever you have some conditional logic use exhaustive when statements,
+this way if new IR types are added later compiler will force the developer to address the missing logic.
