@@ -268,7 +268,7 @@ value class PackedFixedPointDecimal(val packed: Long) : Comparable<FPD> {
       }
 
       @JvmStatic
-      fun from(value: Long, scale: Int): FPD {
+      fun from(value: Long, scale: Int = 0): FPD {
          return FPD((value shl VALUE_SHIFT) or scale.toLong().scale())
       }
 

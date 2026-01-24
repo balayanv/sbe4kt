@@ -917,6 +917,15 @@ If we were to use a very compact json for this and efficient ASCII encoding.
 We would have `110` bytes instead of `40` (63% more compact), 
 and we would waste time serializing/deserializing this vs 0 serialization needed with SBE.
 
+### Recording packed timestamps MicroTrace
+
+Lets assume we know the starting timestamp of an event we want to track as it travels trough various services.
+We could use a single `int64` to record 4 `uint16` durations (representing microseconds).
+
+```kotlin
+
+```
+
 ### Structs/Composite types
 
 You can use structs via `isStruct` flag. Lets use this feature to define a `Signal` event published by some trading strategy, when its wants us to buy or sell.

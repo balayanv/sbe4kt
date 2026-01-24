@@ -120,6 +120,9 @@ value class TimeId(val value: Nanos = 0.ns) {
       return TimeId(value + 100.ns)
    }
 
+   fun add(micros: Micros): TimeId = TimeId(value + micros.toNs())
+   fun add(millis: Millis): TimeId = TimeId(value + millis.toNs())
+
    fun debugToString(): String {
       val str = StringBuilder(toString())
       val lastIndex = str.lastIndex
@@ -129,7 +132,7 @@ value class TimeId(val value: Nanos = 0.ns) {
       return str.toString()
    }
 
-   override fun toString(): String = value.toString()
+   override fun toString(): String = value.nanos.toString()
 
    private fun Nanos.withTag(tag: Tag): Nanos {
       val currentTag = nanos % 100

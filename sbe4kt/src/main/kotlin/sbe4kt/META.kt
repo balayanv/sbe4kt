@@ -34,6 +34,12 @@ annotation class META(
     * Allowed types for a union field, must be a message or composite/struct.
     */
    val oneOf: Array<KClass<*>> = [],
+
+   /**
+    * Milestones at which point measurements taken.
+    * Order is matched with SplitTimer slots.
+    */
+   val tags : Array<String> = [],
 ) {
    enum class Encoding(val sbeEncoding : String) {
       ASCII("US-ASCII"),
