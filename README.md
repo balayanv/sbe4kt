@@ -1042,15 +1042,93 @@ This will give you better idea what the code generation does.
 I also recommend inspecting what the generated code actually does, 
 sometimes there are more efficient ways to implment these.
 
-### Using union types (sealed classes)
+### Using union types
 
 This is one of the features that is quite frequently used in other systems.
 In protobuf this is known as `oneof`, when your wrapper type can have only one of the specified types as payload.
 
-TODO
+Here is an example of using union types.
 
+```kotlin
+@SBE
+data class Wrapper(
+   var id: TimeId,
+   @META(oneOf = [Failure::class, Success::class])
+   var result: Any,
+)
 
+@SBE(id = 2)
+data class Failure(var id: TimeId, var code: Int)
 
+@SBE(id = 1)
+data class Success(var id: TimeId, var result: Long)
+```
+I'm still considering options but for now unions are stored as a composite.
+
+```xml
+<composite name='resultUnion'>
+  <type name='type' primitiveType='int32'/>
+  <type name='data' primitiveType='uint8' length='24'/>
+</composite>
+```
+The type is used as a discriminator and uses id of the message (thinking about what to do about structs).
+
+```xml
+<sbe:message name='Success' id='1' description='Success'>
+  <field name='id' id='1' type='int64'/>
+  <field name='result' id='2' type='int64'/>
+</sbe:message>
+<sbe:message name='Failure' id='2' description='Failure'>
+   <field name='id' id='1' type='int64'/>
+   <field name='code' id='2' type='int32'/>
+</sbe:message>
+<sbe:message name='Wrapper' id='3' description='Wrapper'>
+   <field name='result' id='2' type='resultUnion'/>
+   <field name='id' id='1' type='int64'/>
+</sbe:message>
+```
+
+It is important that the ids are consistent, i recommend turning on the `requireMessageIds` for real usage. Adding new types will change order/id that is assigned. 
+
+Generated code of those messages is then used to deserialize the `data` field.
+
+```kotlin
+fun main() {
+   val msg = Wrapper(id = TimeId.now(), result = newSuccess(TimeId.now(), 42L))
+
+   // unlike java kotlin has cutting edge features such as
+   // not needing to cast to a type if you just checked its type...
+   when (val payload = msg.result) {
+      is Success -> println("success : ${payload.id} ${payload.result}") // hence payload is of type Success here
+      is Failure -> println("failure : ${payload.id} ${payload.code}") // same goes for failure case
+   }
+
+   msg.printSbeLayout()
+   randomSuccess().printSbeLayout()
+}
+```
+`resultUnion` field will have 4 extra bytes (thats the discriminator).
+
+```text
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Wrapper (totalSize = 44 bytes)                                                                            │
+├────────┬──────────┬────────┬─────────────┬──────┬─────────────────────────────────────────────────────────┤
+│ Offset │ Field    │ Type   │ SBE Type    │ Size │ Value                                                   │
+├────────┼──────────┼────────┼─────────────┼──────┼─────────────────────────────────────────────────────────┤
+│ 0      │ [HEADER] │ Header │             │ 8    │ 36|3|1|0                                                │
+│ 8      │ result   │ Any    │ resultUnion │ 28   │ Success(id=Nanos(nanos=1770216009303000000), result=42) │
+│ 36     │ id       │ TimeId │ int64       │ 8    │ Nanos(nanos=1770216009303000000)                        │
+└────────┴──────────┴────────┴─────────────┴──────┴─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ Success (totalSize = 24 bytes)                                                   │
+├────────┬──────────┬────────┬──────────┬──────┬───────────────────────────────────┤
+│ Offset │ Field    │ Type   │ SBE Type │ Size │ Value                             │
+├────────┼──────────┼────────┼──────────┼──────┼───────────────────────────────────┤
+│ 0      │ [HEADER] │ Header │          │ 8    │ 16|1|1|0                          │
+│ 8      │ id       │ TimeId │ int64    │ 8    │ Nanos(nanos=-7435250699869327733) │
+│ 16     │ result   │ Long   │ int64    │ 8    │ 6837095934708511301               │
+└────────┴──────────┴────────┴──────────┴──────┴───────────────────────────────────┘
+```
 
 ---
 ## Contributing
