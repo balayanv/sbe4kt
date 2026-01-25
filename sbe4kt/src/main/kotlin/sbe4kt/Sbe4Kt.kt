@@ -10,6 +10,7 @@ import sbe4kt.ir.Struct
 import sbe4kt.kt.generateKotlinExtensionsForMessage
 import sbe4kt.kt.generateStr64ValueClassFile
 import sbe4kt.kt.generateStructFile
+import sbe4kt.kt.generateTestsForMessage
 import sbe4kt.sbe.generateSbe
 import sbe4kt.util.isStruct
 import sbe4kt.util.qualifiedName
@@ -100,6 +101,7 @@ internal object KSP : SymbolProcessor {
       }
       ir.messages.forEach { message ->
          KSP.generateKotlinExtensionsForMessage(message)
+         KSP.generateTestsForMessage(message)
       }
       return invalidTypes
    }
