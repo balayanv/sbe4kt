@@ -40,7 +40,7 @@ value class MicroTag4(val value: Long = 0L) {
    fun toDebugString() = "binary : [${value.toBinaryString(16)}]\nvalues : ${toString()}"
 }
 
-fun main() {
+internal fun main() {
    val timer = MicroTag4()
       .set1(11.us)
       .set2(22.us)

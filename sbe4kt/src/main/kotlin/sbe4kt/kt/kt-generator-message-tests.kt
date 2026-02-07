@@ -19,9 +19,11 @@ internal fun generateTestsSection(message: Message): String {
       |      repeat(100) {
       |         val original = random$className()
       |         val bytesWritten = original.encodeTo(buffer)
-      |         assertTrue(bytesWritten > 0)
+      |         
       |         val decoded = new$className()
       |         val bytesRead = decoded.decodeFrom(buffer)
+      |         
+      |         assertTrue(bytesWritten > 0)
       |         assertEquals(bytesWritten, bytesRead)
       |         assertEquals(original, decoded)
       |      }

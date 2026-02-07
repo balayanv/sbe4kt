@@ -1491,7 +1491,7 @@ value class FixedPointDecimal15(val value: Long) {
    fun toFPD14() = FPD14(Util.convertScaleExact(value, scale, 14))
 }
 
-fun main() {
+internal fun main() {
    val a = FPD.fromExact(489.2433333333333, 3)
 //   val a = PFPD.fromExact(489.243, 3)
 //   val b = PFPD.fromExact("3.4").withScale(a.scale)

@@ -15,9 +15,7 @@ import sbe4kt.util.sbeAnnotation
  */
 internal sealed interface IR {
 
-   sealed interface Root {
-
-   }
+   sealed interface Root
 
    sealed interface Leaf {
       val sbeName: String
@@ -124,7 +122,7 @@ internal data class Field(
 ) {
    val name: String = prop.simpleName.asString().requireNotReserveWord()
    val type: IR.Leaf = prop.toLeaf()
-   val isNullable: kotlin.Boolean = prop.type.resolve().isMarkedNullable
+   val isNullable: Boolean = prop.type.resolve().isMarkedNullable
    val tags: List<String> = prop.metaAnnotation().tags()
 
    var id: Int = -1
@@ -206,7 +204,7 @@ private fun recursiveResolveLeaf(declaration: KSDeclaration): IR.Leaf {
    }
 
    return when (declaration.qualifiedName()) {
-      "kotlin.Boolean" -> Boolean
+      "kotlin.Boolean" -> Bool
       "kotlin.Char" -> Char
       "kotlin.Byte" -> Int8
       "kotlin.Short" -> Int16

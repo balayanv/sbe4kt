@@ -140,7 +140,7 @@ value class TimeId(val value: Nanos = 0.ns) {
    }
 }
 
-fun main() {
+internal fun main() {
    fun sleepSometimes() {
       if (ThreadLocalRandom.current().nextDouble(0.0, 1.0) < 0.01) {
          println("sleep")

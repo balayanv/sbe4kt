@@ -6,7 +6,6 @@ import sbe4kt.util.packageName
 import sbe4kt.util.sbeAnnotation
 import sbe4kt.util.simpleName
 import sbe4kt.util.usePadding
-import kotlin.Boolean
 
 internal typealias Composite = Struct
 

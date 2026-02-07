@@ -1,6 +1,6 @@
 package sbe4kt.ir
 
-internal data object Boolean : IR.Leaf {
+internal data object Bool : IR.Leaf {
    override val sbeName = "int8"
    override val name = "Boolean"
    override val defaultValue = "false"
