@@ -937,9 +937,71 @@ and we would waste time serializing/deserializing this vs 0 serialization needed
 
 ### Using Flags
 
+Using Boolean fields is often quite taxing, not only these create branches (because a byte/short needs to be converted to true/false) but they at the minimum take 1 byte to store. If you enable padding each one will cost 8 bytes.
 
+You can mitigate this unnecessary cost by using bitsets by using `useFlags = true`.
 
-### Recording packed timestamps MicroTag4
+```kotlin
+@SBE(useFlags = true)
+data class Order(
+   var symbol: Long,
+   var price: FPD,
+   var amount: FPD,
+
+   var isAlgoOrder: Boolean,
+   var isHidden: Boolean,
+   var isGTC: Boolean,
+)
+
+fun main() {
+  val order = randomOrder()
+  order.printSbeLayout()
+  order.log()
+}
+```
+
+This will use SBE bitset for storing boolean fields.
+
+```xml
+ <types>
+  <set name='OrderFlags' encodingType='uint8'>
+    <choice name="isAlgoOrder">0</choice>
+    <choice name="isHidden">1</choice>
+    <choice name="isGTC">2</choice>
+  </set>
+</types>
+
+<sbe:message name='Order' id='1' description='Order'>
+    <field name='symbol' id='1' type='int64'/>
+    <field name='price' id='2' type='int64'/>
+    <field name='amount' id='3' type='int64'/>
+    <field name='flags' id='6' type='OrderFlags'/>
+</sbe:message>
+```
+
+You will see in the output that it uses each individual bit to store values for the Boolean fields.
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────┐
+│ Order (totalSize = 33 bytes)                                                             │
+├────────┬───────────────┬─────────────────────────┬──────────┬──────┬─────────────────────┤
+│ Offset │ Field         │ Type                    │ SBE Type │ Size │ Value               │
+├────────┼───────────────┼─────────────────────────┼──────────┼──────┼─────────────────────┤
+│ 0      │ [HEADER]      │ Header                  │          │ 8    │ 25|1|1|0            │
+│ 8      │ symbol        │ Long                    │ int64    │ 8    │ 9205713467656431517 │
+│ 16     │ price         │ PackedFixedPointDecimal │ int64    │ 8    │ -2887126247.6035813 │
+│ 24     │ amount        │ PackedFixedPointDecimal │ int64    │ 8    │ 68.741992189043845  │
+│ 32     │ flags         │ OrderFlags              │ uint8    │ 1    │ [flags]             │
+│ 32     │   isAlgoOrder │ Boolean                 │ bit[0]   │ 1/8  │ true                │
+│ 32     │   isHidden    │ Boolean                 │ bit[1]   │ 1/8  │ true                │
+│ 32     │   isGTC       │ Boolean                 │ bit[2]   │ 1/8  │ true                │
+└────────┴───────────────┴─────────────────────────┴──────────┴──────┴─────────────────────┘
+Order(symbol=9205713467656431517, price=-2887126247.6035813, amount=68.741992189043845, isAlgoOrder=true, isHidden=true, isGTC=true)
+```
+
+In this case its using uint8 but it will scale based on number of boolean fields upto `uint64` (64 boolean fields).
+
+### Recording packed timestamp/tags with MicroTag4
 
 Lets assume we know the starting timestamp of an event we want to track as it travels trough various services.
 We could use a single `int64` to record 4 `uint16` durations (representing microseconds), 

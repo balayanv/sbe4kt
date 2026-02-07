@@ -7,7 +7,9 @@ import sbe4kt.util.trimTemplate
 
 internal fun generateEncodersSection(message: Message): String {
    val className = message.name
-   val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
+
+   // Use allFields for constructor params (includes boolean fields even if useFlags=true)
+   val fieldsDecOrder = message.allFields.sortedBy { it.declarationOrder }
    val fieldsSbeOrder = message.fields.sortedBy { it.sbeOrder }
 
    val encoderName = className.replaceFirstChar { it.lowercase() } + "Encoder"
@@ -22,8 +24,23 @@ internal fun generateEncodersSection(message: Message): String {
    val randomParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.randomValue}," }
    val args = fieldsDecOrder.joinToString(", ") { it.name }
 
-   val encoderBody = fieldsSbeOrder.joinToString("\n") { it.type.howToEncodeFromSource(encoderName, it.name, "source") }
-   val decoderBody = fieldsSbeOrder.joinToString("\n") { it.type.howToDecodeIntoTarget(decoderName, it.name, "target") }
+   // Encoder body: non-boolean fields + flags
+   val encoderBody = if (message.useFlags && message.booleanFields.isNotEmpty()) {
+      val nonBoolEncoding = fieldsSbeOrder.joinToString("\n") { it.type.howToEncodeFromSource(encoderName, it.name, "source") }
+      val flagsChain = message.booleanFields.joinToString("") { "\n   .${it.name}($sourceVarName.${it.name})" }
+      "$nonBoolEncoding\n$encoderName.flags().clear()$flagsChain"
+   } else {
+      fieldsSbeOrder.joinToString("\n") { it.type.howToEncodeFromSource(encoderName, it.name, "source") }
+   }
+
+   // Decoder body: non-boolean fields + flags
+   val decoderBody = if (message.useFlags && message.booleanFields.isNotEmpty()) {
+      val nonBoolDecoding = fieldsSbeOrder.joinToString("\n") { it.type.howToDecodeIntoTarget(decoderName, it.name, "target") }
+      val flagsDecoding = message.booleanFields.joinToString("\n") { "$targetVarName.${it.name} = $decoderName.flags().${it.name}()" }
+      "$nonBoolDecoding\n$flagsDecoding"
+   } else {
+      fieldsSbeOrder.joinToString("\n") { it.type.howToDecodeIntoTarget(decoderName, it.name, "target") }
+   }
 
    return """
       |const val $sizeConstName = MessageHeaderEncoder.ENCODED_LENGTH + $totalSize

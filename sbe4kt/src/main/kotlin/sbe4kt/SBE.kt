@@ -1,7 +1,5 @@
 package sbe4kt
 
-import kotlin.reflect.KClass
-
 /**
  * Main annotation/entry point for KSP to detect which classes to work with.
  * Data classes marked with this annotation will be picked up for code generation.
@@ -50,5 +48,5 @@ annotation class SBE(
    /**
     * Uses i64 bitset to keep track of nullability of fields and boolean flags.
     */
-   val compactFlags: Boolean = false,
+   val useFlags: Boolean = false,
 )

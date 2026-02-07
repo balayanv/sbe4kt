@@ -57,6 +57,53 @@ private fun generateRows(message: Message): String {
       addCsvRow(offset, field, type, sbeType, size, value)
    }
 
+   // Show individual boolean fields if useFlags is enabled
+   if (message.useFlags && message.booleanFields.isNotEmpty()) {
+      // Calculate offset for flags field (after last non-boolean field)
+      val flagsOffset = if (sortedFields.isNotEmpty()) {
+         sortedFields.last().offset + sortedFields.last().type.size
+      } else {
+         0
+      }
+
+      // Determine size based on boolean count
+      val flagsSize = when {
+         message.booleanFields.size <= 8 -> 1
+         message.booleanFields.size <= 16 -> 2
+         message.booleanFields.size <= 32 -> 4
+         else -> 8
+      }
+
+      val flagsSbeType = when (flagsSize) {
+         1 -> "uint8"
+         2 -> "uint16"
+         4 -> "uint32"
+         else -> "uint64"
+      }
+
+      // Show the packed flags field
+      addCsvRow(
+         flagsOffset + headerSize,
+         "flags",
+         "${message.name}Flags",
+         flagsSbeType,
+         flagsSize.toString(),
+         "\"[flags]\""
+      )
+
+      // Show individual boolean fields
+      message.booleanFields.forEachIndexed { index, boolField ->
+         addCsvRow(
+            flagsOffset + headerSize,
+            "  ${boolField.name}",
+            "Boolean",
+            "bit[$index]",
+            "1/8",
+            "${boolField.name}.toString()"
+         )
+      }
+   }
+
    // show final padding if there is a gap
    if (message.usePadding && sortedFields.isNotEmpty()) {
       val lastField = sortedFields.last()
