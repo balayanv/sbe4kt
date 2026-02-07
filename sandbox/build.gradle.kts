@@ -3,6 +3,7 @@ val sbeCompilerMain = "uk.co.real_logic.sbe.SbeTool"
 
 plugins {
     kotlin("jvm")
+    application
 }
 
 repositories {
@@ -17,6 +18,18 @@ dependencies {
     implementation("org.agrona:agrona:1.20.0")
     implementation("uk.co.real-logic:sbe-all:1.31.1")
     "sbeCompiler"("uk.co.real-logic:sbe-all:1.31.1")
+
+    implementation("com.lmax:disruptor:4.0.0")
+
+    testImplementation("io.cucumber:cucumber-java:7.29.0")
+    testImplementation("io.cucumber:cucumber-junit-platform-engine:7.29.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+application {
+    mainClass.set("sandbox.DisruptorExampleKt")
+    applicationDefaultJvmArgs = listOf(jvmUnsafeAccessArg)
 }
 
 kotlin {
@@ -76,4 +89,12 @@ tasks.named("compileJava") {
 
 tasks.named("compileKotlin") {
     dependsOn(sbeGenerate)
+}
+
+tasks.test {
+    useJUnitPlatform {
+        includeEngines("cucumber")
+    }
+    systemProperty("cucumber.glue", "sandbox")
+    systemProperty("cucumber.features", "classpath:features")
 }

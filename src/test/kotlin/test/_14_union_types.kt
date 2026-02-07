@@ -1,0 +1,200 @@
+package test
+
+import org.agrona.concurrent.UnsafeBuffer
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions.*
+import sbe4kt.META
+import sbe4kt.SBE
+import sbe4kt.lib.TimeId
+import sbe4kt.lib.Nanos
+
+@SBE
+data class Wrapper1(
+   var id: TimeId,
+   @META(oneOf = [Failure1::class, Success1::class])
+   var payload: Any,
+)
+
+@SBE(id = 102)
+data class Failure1(var timestamp: TimeId, var errorCode: Int)
+
+@SBE(id = 101)
+data class Success1(var timestamp: TimeId, var value: Long)
+
+class UnionTypesTest {
+
+   @Test
+   fun successUnionEncodeDecodeRoundtrip() {
+      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
+      val wrapperId = TimeId(Nanos(1000000000L))
+      val successId = TimeId(Nanos(2000000000L))
+
+      Wrapper1(
+         id = wrapperId,
+         payload = Success1(timestamp = successId, value = 42L)
+      ).encodeTo(buffer)
+
+      val decoded = newWrapper1()
+      decoded.decodeFrom(buffer)
+
+      assertEquals(wrapperId, decoded.id)
+      assertTrue(decoded.payload is Success1)
+
+      val success = decoded.payload as Success1
+      assertEquals(successId, success.timestamp)
+      assertEquals(42L, success.value)
+   }
+
+   @Test
+   fun failureUnionEncodeDecodeRoundtrip() {
+      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
+      val wrapperId = TimeId(Nanos(3000000000L))
+      val failureId = TimeId(Nanos(4000000000L))
+
+      Wrapper1(
+         id = wrapperId,
+         payload = Failure1(timestamp = failureId, errorCode = 404)
+      ).encodeTo(buffer)
+
+      val decoded = newWrapper1()
+      decoded.decodeFrom(buffer)
+
+      assertEquals(wrapperId, decoded.id)
+      assertTrue(decoded.payload is Failure1)
+
+      val failure = decoded.payload as Failure1
+      assertEquals(failureId, failure.timestamp)
+      assertEquals(404, failure.errorCode)
+   }
+
+   @Test
+   fun flyweightReadWriteSuccess() {
+      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
+      val fw = Wrapper1RW(buffer, 0)
+
+      val wrapperId = TimeId(Nanos(5000000000L))
+      val successId = TimeId(Nanos(6000000000L))
+
+      fw.id(wrapperId)
+      fw.payload(Success1(timestamp = successId, value = 999L))
+
+      assertEquals(wrapperId, fw.id())
+
+      val retrievedPayload = fw.payload()
+      assertTrue(retrievedPayload is Success1)
+      assertEquals(successId, (retrievedPayload as Success1).timestamp)
+      assertEquals(999L, retrievedPayload.value)
+   }
+
+   @Test
+   fun flyweightReadWriteFailure() {
+      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
+      val fw = Wrapper1RW(buffer, 0)
+
+      val wrapperId = TimeId(Nanos(7000000000L))
+      val failureId = TimeId(Nanos(8000000000L))
+
+      fw.id(wrapperId)
+      fw.payload(Failure1(timestamp = failureId, errorCode = 500))
+
+      assertEquals(wrapperId, fw.id())
+
+      val retrievedPayload = fw.payload()
+      assertTrue(retrievedPayload is Failure1)
+      assertEquals(failureId, (retrievedPayload as Failure1).timestamp)
+      assertEquals(500, retrievedPayload.errorCode)
+   }
+
+   @Test
+   fun flyweightEncodeFromAndDecodeInto() {
+      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
+      val fw = Wrapper1RW(buffer, 0)
+
+      val original = Wrapper1(
+         id = TimeId(Nanos(9000000000L)),
+         payload = Success1(timestamp = TimeId(Nanos(10000000000L)), value = 777L)
+      )
+
+      fw.encodeFrom(original)
+
+      val target = newWrapper1()
+      fw.decodeInto(target)
+
+      assertEquals(original.id, target.id)
+      assertTrue(target.payload is Success1)
+      assertEquals(777L, (target.payload as Success1).value)
+   }
+
+   @Test
+   fun readOnlyFlyweight() {
+      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
+
+      Wrapper1(
+         id = TimeId(Nanos(11000000000L)),
+         payload = Failure1(timestamp = TimeId(Nanos(12000000000L)), errorCode = 403)
+      ).encodeTo(buffer)
+
+      val fwR = Wrapper1R(buffer, 0)
+      assertEquals(TimeId(Nanos(11000000000L)), fwR.id())
+
+      val payload = fwR.payload()
+      assertTrue(payload is Failure1)
+      assertEquals(403, (payload as Failure1).errorCode)
+   }
+
+   @Test
+   fun writeOnlyFlyweight() {
+      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
+      val fwW = Wrapper1W(buffer, 0)
+
+      fwW.id(TimeId(Nanos(13000000000L)))
+      fwW.payload(Success1(timestamp = TimeId(Nanos(14000000000L)), value = 888L))
+
+      val decoded = newWrapper1()
+      decoded.decodeFrom(buffer)
+
+      assertEquals(TimeId(Nanos(13000000000L)), decoded.id)
+      assertTrue(decoded.payload is Success1)
+      assertEquals(888L, (decoded.payload as Success1).value)
+   }
+
+   @Test
+   fun smartCastInWhen() {
+      val msg = Wrapper1(
+         id = TimeId.now(),
+         payload = Success1(TimeId.now(), 42L)
+      )
+
+      when (val payload = msg.payload) {
+         is Success1 -> assertEquals(42L, payload.value)
+         is Failure1 -> fail("Expected Success but got Failure")
+      }
+   }
+
+   @Test
+   fun switchingUnionTypes() {
+      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
+      val fw = Wrapper1RW(buffer, 0)
+
+      fw.id(TimeId(Nanos(15000000000L)))
+      fw.payload(Success1(timestamp = TimeId.now(), value = 100L))
+
+      assertTrue(fw.payload() is Success1)
+
+      fw.payload(Failure1(timestamp = TimeId.now(), errorCode = 404))
+
+      assertTrue(fw.payload() is Failure1)
+      assertEquals(404, (fw.payload() as Failure1).errorCode)
+   }
+
+   @Test
+   fun printLayouts() {
+      Wrapper1(
+         id = TimeId.now(),
+         payload = Success1(TimeId.now(), 42L)
+      ).printSbeLayout()
+
+      randomSuccess1().printSbeLayout()
+      randomFailure1().printSbeLayout()
+   }
+}
