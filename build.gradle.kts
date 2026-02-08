@@ -1,11 +1,13 @@
 val jvmUnsafeAccessArg = "--sun-misc-unsafe-memory-access=allow"
+val jvmAddExportsArg = "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED"
 val sbeCompilerMain = "uk.co.real_logic.sbe.SbeTool"
 val kotlinVersion = "2.3.0"
-val kspVersion = "2.3.4"
+val kspVersion = "2.3.5"
 
 plugins {
    kotlin("jvm") version "2.3.0"
-   id("com.google.devtools.ksp") version "2.3.4"
+   id("com.google.devtools.ksp") version "2.3.5"
+   id("com.github.ben-manes.versions") version "0.53.0"
    application
    idea
 }
@@ -34,18 +36,18 @@ dependencies {
    implementation(project(":sbe4kt"))
 
    // External dependencies
-   implementation("org.agrona:agrona:1.20.0")
-   implementation("uk.co.real-logic:sbe-all:1.31.1")
-   "sbeCompiler"("uk.co.real-logic:sbe-all:1.31.1")
+   implementation("org.agrona:agrona:2.4.0")
+   implementation("uk.co.real-logic:sbe-all:1.37.1")
+   "sbeCompiler"("uk.co.real-logic:sbe-all:1.37.1")
 
    // Testing
-   testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+   testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 application {
    mainClass.set("example.ExampleKt")
-   applicationDefaultJvmArgs = listOf(jvmUnsafeAccessArg)
+   applicationDefaultJvmArgs = listOf(jvmUnsafeAccessArg, jvmAddExportsArg)
 }
 
 sourceSets {
@@ -74,7 +76,7 @@ fun createSbeGenerateTask(
 
       mainClass.set(sbeCompilerMain)
       classpath = configurations["sbeCompiler"]
-      jvmArgs(jvmUnsafeAccessArg)
+      jvmArgs(jvmUnsafeAccessArg, jvmAddExportsArg)
 
       val schemaFile = file("build/generated/ksp/$sourceSet/resources/sbe-schema.xml")
       val outputDir = file("build/generated/sbe/$sourceSet/java")
@@ -124,7 +126,7 @@ tasks.named("clean") {
 
 tasks.test {
    useJUnitPlatform()
-   jvmArgs(jvmUnsafeAccessArg)
+   jvmArgs(jvmUnsafeAccessArg, jvmAddExportsArg)
 }
 
 tasks.named("compileJava") { dependsOn(sbeGenerateMain) }
