@@ -18,47 +18,18 @@ internal fun generateFlyweightsSection(message: Message): String {
    // Include all fields including unions - Union implements fwGetter/fwSetter properly
    val fieldsForFlyweights = fieldsDecOrder
 
-   // Encoder/Decoder bodies: non-boolean fields + flags
-   val fwEncoderBody = if (message.useFlags && message.booleanFields.isNotEmpty()) {
-      val nonBoolEncoding = fieldsSbeOrder.joinToString("\n") {
-         val encoderParam = if (it.type is Message) "${className.replaceFirstChar { it.lowercase() }}Encoder" else "encoder"
-         it.type.howToEncodeFromSource(encoderParam, it.name, "source")
-      }
-      val flagsChain = message.booleanFields.joinToString("") { "\n   .${it.name}(source.${it.name})" }
-      "$nonBoolEncoding\nencoder.flags().clear()$flagsChain"
-   } else {
-      fieldsSbeOrder.joinToString("\n") {
-         val encoderParam = if (it.type is Message) "${className.replaceFirstChar { it.lowercase() }}Encoder" else "encoder"
-         it.type.howToEncodeFromSource(encoderParam, it.name, "source")
-      }
+   val fwEncoderBody = fieldsSbeOrder.joinToString("\n") {
+      val encoderParam = if (it.type is Message) "${className.replaceFirstChar { it.lowercase() }}Encoder" else "encoder"
+      it.type.howToEncodeFromSource(encoderParam, it.name, "source")
    }
 
-   val fwDecoderBody = if (message.useFlags && message.booleanFields.isNotEmpty()) {
-      // Use flyweight's own getter methods instead of calling decoder directly
-      val nonBoolDecoding = fieldsSbeOrder.joinToString("\n") { "target.${it.name} = ${it.name}()" }
-      val flagsDecoding = message.booleanFields.joinToString("\n") { "target.${it.name} = ${it.name}()" }
-      "$nonBoolDecoding\n$flagsDecoding"
-   } else {
-      // Use flyweight's own getter methods instead of calling decoder directly
-      fieldsSbeOrder.joinToString("\n") { "target.${it.name} = ${it.name}()" }
+   val fwDecoderBody = fieldsSbeOrder.joinToString("\n") {
+      val decoderParam = if (it.type is Message) "${className.replaceFirstChar { it.lowercase() }}Decoder" else "decoder"
+      it.type.howToDecodeIntoTarget(decoderParam, it.name, "target")
    }
 
-   // Getters/Setters: non-boolean fields + boolean flags
-   val fwGetters = if (message.useFlags && message.booleanFields.isNotEmpty()) {
-      val nonBoolGetters = fieldsForFlyweights.joinToString("\n") { "fun ${it.name}() = ${it.type.fwGetter("decoder", it.name)}" }
-      val flagGetters = message.booleanFields.joinToString("\n") { "fun ${it.name}() = decoderFlags.${it.name}" }
-      "$nonBoolGetters\n$flagGetters"
-   } else {
-      fieldsForFlyweights.joinToString("\n") { "fun ${it.name}() = ${it.type.fwGetter("decoder", it.name)}" }
-   }
-
-   val fwSetters = if (message.useFlags && message.booleanFields.isNotEmpty()) {
-      val nonBoolSetters = fieldsForFlyweights.joinToString("\n") { "fun ${it.name}(${it.name}: ${it.type.name}) = apply { ${it.type.fwSetter("encoder", it.name)} }" }
-      val flagSetters = message.booleanFields.joinToString("\n") { "fun ${it.name}(${it.name}: Boolean) = apply { encoderFlags.${it.name}(${it.name}) }" }
-      "$nonBoolSetters\n$flagSetters"
-   } else {
-      fieldsForFlyweights.joinToString("\n") { "fun ${it.name}(${it.name}: ${it.type.name}) = apply { ${it.type.fwSetter("encoder", it.name)} }" }
-   }
+   val fwSetters = fieldsForFlyweights.joinToString("\n") { "fun ${it.name}(${it.name}: ${it.type.name}) = apply { ${it.type.fwSetter("encoder", it.name)} }" }
+   val fwGetters = fieldsForFlyweights.joinToString("\n") { "fun ${it.name}() = ${it.type.fwGetter("decoder", it.name)}" }
 
    // if type uses other complex types expose their generated flyweights
    val fwFieldFWs = compositFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}RW(encoder.${it.name}(), decoder.${it.name}())" }
@@ -80,20 +51,6 @@ internal fun generateFlyweightsSection(message: Message): String {
    val nestedMessageFWsW = nestedMessageFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}W(buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${it.name}EncodingOffset())" }
    val nestedMessageFwGetters = nestedMessageFields.joinToString("\n") { "fun ${it.name}FW() = ${it.name}FW" }
 
-   // useFlags support
-   var encoderFlagsDef = ""
-   var decoderFlagsDef = ""
-   var encoderFlagsWrap = ""
-   var decoderFlagsWrap = ""
-
-   if (message.useFlags && message.booleanFields.isNotEmpty()){
-      encoderFlagsWrap = "encoderFlags = encoder.flags()"
-      decoderFlagsWrap = "decoderFlags = decoder.flags()"
-
-      encoderFlagsDef = "private var $encoderFlagsWrap"
-      decoderFlagsDef = "private var $decoderFlagsWrap"
-   }
-
    return """
       |class ${className}RW(
       |   var buffer: MutableDirectBuffer = UnsafeBuffer(ByteArray($sizeConstName)),
@@ -101,11 +58,9 @@ internal fun generateFlyweightsSection(message: Message): String {
       |) {
       |   private val headerEncoder = MessageHeaderEncoder()
       |   private val encoder = ${className}Encoder()
-      |${encoderFlagsDef.indent(3)}
       |
       |   private val headerDecoder = MessageHeaderDecoder()
       |   private val decoder = ${className}Decoder()
-      |${decoderFlagsDef.indent(3)}
       |
       |${fwFieldFWs.indent(3)}
       |
@@ -124,10 +79,8 @@ internal fun generateFlyweightsSection(message: Message): String {
       |      check(buffer.capacity() - offset >= $sizeConstName) { "buffer has not enough capacity for '$className' (need at least : $$sizeConstName, actual : ${'$'}{buffer.capacity()})" }
       |      encoder.wrapAndApplyHeader(buffer, offset, headerEncoder)
       |${fwFieldFwEncoderWraps.indent(6)}
-      |${encoderFlagsWrap.indent(6)}
       |      decoder.wrapAndApplyHeader(buffer, offset, headerDecoder)
       |${fwFieldFwDecoderWraps.indent(6)}
-      |${decoderFlagsWrap.indent(6)}
       |   }
       |
       |   fun wrap(buffer: MutableDirectBuffer, offset: Int) = apply {
@@ -135,6 +88,7 @@ internal fun generateFlyweightsSection(message: Message): String {
       |      this.offset = offset
       |      prepareBuffer()
       |   }
+      |
       |
       |${fwFieldFwGettersRW.indent(3)}
       |
@@ -159,7 +113,6 @@ internal fun generateFlyweightsSection(message: Message): String {
       |) {
       |   private val headerDecoder = MessageHeaderDecoder()
       |   private val decoder = ${className}Decoder()
-      |${decoderFlagsDef.indent(3)}
       |
       |${fwFieldFWsR.indent(3)}
       |
@@ -177,7 +130,6 @@ internal fun generateFlyweightsSection(message: Message): String {
       |   private fun prepareBuffer() {
       |      check(buffer.capacity() - offset >= $sizeConstName) { "buffer has not enough capacity for '$className' (need at least : $$sizeConstName, actual : ${'$'}{buffer.capacity()})" }
       |      decoder.wrapAndApplyHeader(buffer, offset, headerDecoder)
-      |${decoderFlagsWrap.indent(6)}
       |   }
       |
       |   fun wrap(buffer: DirectBuffer, offset: Int) = apply {
@@ -205,7 +157,6 @@ internal fun generateFlyweightsSection(message: Message): String {
       |) {
       |   private val headerEncoder = MessageHeaderEncoder()
       |   private val encoder = ${className}Encoder()
-      |${encoderFlagsDef.indent(3)}
       |
       |${fwFieldFWsW.indent(3)}
       |
@@ -223,7 +174,6 @@ internal fun generateFlyweightsSection(message: Message): String {
       |   private fun prepareBuffer() {
       |      check(buffer.capacity() - offset >= $sizeConstName) { "buffer has not enough capacity for '$className' (need at least : $$sizeConstName, actual : ${'$'}{buffer.capacity()})" }
       |      encoder.wrapAndApplyHeader(buffer, offset, headerEncoder)
-      |${encoderFlagsWrap.indent(6)}
       |   }
       |
       |   fun wrap(buffer: MutableDirectBuffer, offset: Int) = apply {

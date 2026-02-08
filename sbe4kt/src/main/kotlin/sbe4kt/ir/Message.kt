@@ -4,13 +4,13 @@ import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFile
 import sbe4kt.util.allowNullableTypes
+import sbe4kt.util.compactFlags
 import sbe4kt.util.getFieldIRs
 import sbe4kt.util.id
 import sbe4kt.util.packageName
 import sbe4kt.util.sbeAnnotation
 import sbe4kt.util.simpleName
 import sbe4kt.util.usePadding
-import sbe4kt.util.useFlags
 
 internal data class Message(
    val declaration: KSClassDeclaration
@@ -19,16 +19,9 @@ internal data class Message(
    var id: Int = annotation.id()
    val usePadding: Boolean = annotation.usePadding()
    val allowNullableTypes: Boolean = annotation.allowNullableTypes()
-   val useFlags: Boolean = annotation.useFlags()
+   val compactFlags: Boolean = annotation.compactFlags()
    var blockLength: Int = -1
-   val allFields = declaration.getFieldIRs()
-
-   // Separate boolean fields when useFlags is enabled (use IR.Boolean for comparison)
-   val booleanFields: List<Field> = if (useFlags) allFields.filter { it.type == sbe4kt.ir.Bool } else emptyList()
-   val nonBooleanFields: List<Field> = if (useFlags) allFields.filter { it.type != sbe4kt.ir.Bool } else allFields
-
-   // For SBE schema and layout: use nonBooleanFields (booleans are in the set)
-   val fields = nonBooleanFields
+   val fields = declaration.getFieldIRs()
 
 
    override val name = declaration.simpleName()
@@ -60,17 +53,6 @@ internal data class Message(
             field.sbeOrder = index + 1
             currentOffset += field.type.size
          }
-
-      // Add flags field size if useFlags is enabled
-      if (useFlags && booleanFields.isNotEmpty()) {
-         val flagsSize = when {
-            booleanFields.size <= 8 -> 1
-            booleanFields.size <= 16 -> 2
-            booleanFields.size <= 32 -> 4
-            else -> 8
-         }
-         currentOffset += flagsSize
-      }
 
       blockLength = if (usePadding) {
          val remainder = currentOffset % 8
@@ -127,10 +109,6 @@ internal data class Message(
       imports.add("sbe4kt.lib.CSV")
       imports.add("sbe4kt.${name}Encoder")
       imports.add("sbe4kt.${name}Decoder")
-      if (useFlags && booleanFields.isNotEmpty()) {
-         imports.add("sbe4kt.${name}FlagsEncoder")
-         imports.add("sbe4kt.${name}FlagsDecoder")
-      }
       fields.onEach { imports.addAll(it.type.imports) }
 
       // Add encoder/decoder imports for union composite types and their allowed types

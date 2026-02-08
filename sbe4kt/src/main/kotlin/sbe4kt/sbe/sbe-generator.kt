@@ -17,7 +17,6 @@ internal fun KSP.generateSbe() {
    val byteArrayTypes = ir.byteArraySizes.joinToString("\n") { generateByteArrayType(it) }
    val stringTypes = ir.fixedStrings.joinToString("\n") { generateStringType(it) }
    val enums = ir.enums.joinToString("\n") { generateEnumType(it) }
-   val flagSets = ir.messages.filter { it.useFlags && it.booleanFields.isNotEmpty() }.joinToString("\n") { generateFlagSetType(it) }
    val structs = ir.structs.joinToString("\n") { generateCompositeType(it) }
    val unions = ir.unionFields.joinToString("\n") { generateUnionComposite(it) }
    val messages = ir.messages.joinToString("\n") { generateMessageBody(it) }
@@ -45,8 +44,6 @@ internal fun KSP.generateSbe() {
       |
       |${enums.indent(6)}
       |
-      |${flagSets.indent(6)}
-      |
       |${structs.indent(6)}
       |
       |${unions.indent(6)}
@@ -62,23 +59,13 @@ internal fun KSP.generateSbe() {
 }
 
 private fun generateMessageBody(message: Message): String {
-   val nonBoolFields = message.fields.sortedBy { it.sbeOrder }
+   val fields = message.fields.sortedBy { it.sbeOrder }
 
-   val nonBoolXml = nonBoolFields.joinToString("\n") {
+   val xml = fields.joinToString("\n") {
       val offsetAttr = if (message.usePadding && it.offset >= 0) " offset='${it.offset}'" else ""
       val presenceAttr = if (it.isNullable) " presence='optional'" else ""
       "<field name='${it.name}' id='${it.id}' type='${it.type.sbeName}'$offsetAttr$presenceAttr/>"
    }
-
-   // Add flags field if useFlags is enabled and there are boolean fields
-   val flagsXml = if (message.useFlags && message.booleanFields.isNotEmpty()) {
-      val flagsId = message.allFields.maxOfOrNull { it.id } ?: 1
-      "\n<field name='flags' id='$flagsId' type='${message.name}Flags'/>"
-   } else {
-      ""
-   }
-
-   val allXml = nonBoolXml + flagsXml
 
    val blockLengthAttribute = if (message.usePadding && message.blockLength > 0) {
       " blockLength='${message.blockLength}'"
@@ -88,7 +75,7 @@ private fun generateMessageBody(message: Message): String {
 
    return """
       |<sbe:message name='${message.name}' id='${message.id}'$blockLengthAttribute description='${message.name}'>
-      |${allXml.indent(3)}
+      |${xml.indent(3)}
       |</sbe:message>
       |""".trimMargin()
 }
@@ -151,29 +138,5 @@ private fun generateEnumType(enum: Enum): String {
       |<enum name='${enum.sbeName}' encodingType='uint8'>
       |${xml.indent(3)}
       |</enum>
-      |""".trimMargin()
-}
-
-private fun generateFlagSetType(message: Message): String {
-   val flagSetName = "${message.name}Flags"
-
-   // Determine encoding type based on boolean count
-   val encodingType = when {
-      message.booleanFields.size <= 8 -> "uint8"
-      message.booleanFields.size <= 16 -> "uint16"
-      message.booleanFields.size <= 32 -> "uint32"
-      else -> "uint64"
-   }
-
-   val choices = message.booleanFields
-      .mapIndexed { index, field ->
-         "<choice name=\"${field.name}\">${index}</choice>"
-      }
-      .joinToString("\n")
-
-   return """
-      |<set name='$flagSetName' encodingType='$encodingType'>
-      |${choices.indent(3)}
-      |</set>
       |""".trimMargin()
 }

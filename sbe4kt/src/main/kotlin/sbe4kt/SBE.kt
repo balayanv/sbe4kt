@@ -48,5 +48,5 @@ annotation class SBE(
    /**
     * Uses i64 bitset to keep track of nullability of fields and boolean flags.
     */
-   val useFlags: Boolean = false,
+   val compactFlags: Boolean = false,
 )
