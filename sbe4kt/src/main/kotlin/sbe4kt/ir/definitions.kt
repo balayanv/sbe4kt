@@ -45,7 +45,6 @@ internal sealed interface IR {
 internal data class Schema(
    val annotatedTypes: List<KSClassDeclaration>,
 ) {
-   val enums: ArrayList<Enum> = ArrayList()
    val structs: ArrayList<Struct> = ArrayList()
    val messages: ArrayList<Message> = ArrayList()
    val unionFields: ArrayList<Union> = ArrayList()
@@ -95,7 +94,6 @@ internal data class Schema(
 
    private fun extractSpecialTypes(type: IR.Leaf) {
       when (type) {
-         is Enum -> enums.add(type)
          is ByteArrayN -> byteArraySizes.add(type.length)
          is StringN -> fixedStrings.add(type)
          is Value -> extractSpecialTypes(type.underlyingType)

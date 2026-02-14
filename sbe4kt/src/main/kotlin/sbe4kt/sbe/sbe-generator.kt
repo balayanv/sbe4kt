@@ -16,7 +16,6 @@ internal fun KSP.generateSbe() {
    val schemaFile = File(resourcesDir, "sbe-schema.xml")
    val byteArrayTypes = ir.byteArraySizes.joinToString("\n") { generateByteArrayType(it) }
    val stringTypes = ir.fixedStrings.joinToString("\n") { generateStringType(it) }
-   val enums = ir.enums.joinToString("\n") { generateEnumType(it) }
    val structs = ir.structs.joinToString("\n") { generateCompositeType(it) }
    val unions = ir.unionFields.joinToString("\n") { generateUnionComposite(it) }
    val messages = ir.messages.joinToString("\n") { generateMessageBody(it) }
@@ -41,8 +40,6 @@ internal fun KSP.generateSbe() {
       |${byteArrayTypes.indent(6)}
       |
       |${stringTypes.indent(6)}
-      |
-      |${enums.indent(6)}
       |
       |${structs.indent(6)}
       |
@@ -128,15 +125,3 @@ private fun generateUnionComposite(union: Union): String {
 private fun generateByteArrayType(size: Int) = "<type name='ByteArray$size' primitiveType='uint8' length='$size'/>"
 
 private fun generateStringType(strN: StringN) = "<type name='${strN.sbeName}' primitiveType='char' length='${strN.length}' characterEncoding='${strN.encoding.sbeEncoding}'/>"
-
-private fun generateEnumType(enum: Enum): String {
-   val xml = enum.entries
-      .mapIndexed { index, name -> "<validValue name='$name'>$index</validValue>" }
-      .joinToString("\n")
-
-   return """
-      |<enum name='${enum.sbeName}' encodingType='uint8'>
-      |${xml.indent(3)}
-      |</enum>
-      |""".trimMargin()
-}
