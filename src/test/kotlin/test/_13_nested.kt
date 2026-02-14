@@ -33,13 +33,14 @@ class NestedMessageTest {
    fun nestedMessageRoundtrip() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_SIGNAL2))
 
-      Signal2(
+      val signal = Signal2(
          direction = Direction2.SELL,
          xy = XY2(time = TimeId(Nanos(1000000000L)), price = FPD.fromExact("100.5")),
-      ).encodeTo(buffer)
+      )
+      wrapAndEncodeSignal2(signal, buffer)
 
       val decoded = newSignal2()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeSignal2(decoded, buffer)
 
       assertEquals(Direction2.SELL, decoded.direction)
       assertEquals(TimeId(Nanos(1000000000L)), decoded.xy.time)
@@ -52,12 +53,12 @@ class NestedMessageTest {
       val fw = Signal2RW(buffer, 0)
 
       fw.direction(Direction2.BUY)
-      fw.xyFW()
+      fw.xy()
          .time(TimeId(Nanos(7777000000L)))
          .price(FPD.fromExact("55.55"))
 
       assertEquals(Direction2.BUY, fw.direction())
-      assertEquals(TimeId(Nanos(7777000000L)), fw.xyFW().time())
-      assertEquals(FPD.fromExact("55.55"), fw.xyFW().price())
+      assertEquals(TimeId(Nanos(7777000000L)), fw.xy().time())
+      assertEquals(FPD.fromExact("55.55"), fw.xy().price())
    }
 }

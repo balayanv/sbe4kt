@@ -56,10 +56,10 @@ class TagsTest {
       tracer.recordMileStone3(baseTime.add(15.us))
       tracer.recordMileStone4(baseTime.add(20.us))
 
-      tracer.encodeTo(buffer)
+      wrapAndEncodeLatencyTracer(tracer, buffer)
 
       val decoded = newLatencyTracer()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeLatencyTracer(decoded, buffer)
 
       assertEquals(baseTime.add(5.us).ns().nanos, decoded.getTimeMileStone1().ns().nanos)
       assertEquals(baseTime.add(10.us).ns().nanos, decoded.getTimeMileStone2().ns().nanos)

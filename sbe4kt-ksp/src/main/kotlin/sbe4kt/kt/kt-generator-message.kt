@@ -28,8 +28,6 @@ internal fun KSP.generateKotlinExtensionsForMessage(
    val microTagSection = generateMicroTagSection(message)
 
    val result = """
-      |@file:Suppress("unused")
-      |
       |package $packageName
       |
       |$importsSection

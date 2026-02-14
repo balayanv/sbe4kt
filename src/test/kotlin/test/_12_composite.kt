@@ -35,26 +35,27 @@ class CompositeTest {
       val fw = Signal1RW(buffer, 100)
 
       fw.f1(Direction1.SELL)
-      fw.f2FW()
+      fw.f2()
          .time(TimeId(Nanos(9999000000L)))
          .price(FPD.fromExact("12345.67"))
 
       assertEquals(Direction1.SELL, fw.f1())
-      assertEquals(TimeId(Nanos(9999000000L)), fw.f2FW().time())
-      assertEquals(FPD.fromExact("12345.67"), fw.f2FW().price())
+      assertEquals(TimeId(Nanos(9999000000L)), fw.f2().time())
+      assertEquals(FPD.fromExact("12345.67"), fw.f2().price())
    }
 
    @Test
    fun compositeEncodeDecodeRoundtrip() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_SIGNAL1))
 
-      Signal1(
+      val signal = Signal1(
          f1 = Direction1.BUY,
          f2 = XY1(time = TimeId(Nanos(1234000000L)), price = FPD.fromExact("78000.0")),
-      ).encodeTo(buffer)
+      )
+      wrapAndEncodeSignal1(signal, buffer)
 
       val decoded = newSignal1()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeSignal1(decoded, buffer)
 
       assertEquals(Direction1.BUY, decoded.f1)
       assertEquals(TimeId(Nanos(1234000000L)), decoded.f2.time)

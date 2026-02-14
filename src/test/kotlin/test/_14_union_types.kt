@@ -3,8 +3,7 @@ package test
 import org.agrona.concurrent.UnsafeBuffer
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.*
-import sbe4kt.META
-import sbe4kt.SBE
+import sbe4kt.*
 import sbe4kt.lib.TimeId
 import sbe4kt.lib.Nanos
 
@@ -44,13 +43,14 @@ class UnionTypesTest {
       val wrapperId = TimeId(Nanos(1000000000L))
       val successId = TimeId(Nanos(2000000000L))
 
-      Wrapper1(
+      val wrapper = Wrapper1(
          id = wrapperId,
          payload = Success1(timestamp = successId, value = 42L)
-      ).encodeTo(buffer)
+      )
+      wrapAndEncodeWrapper1(wrapper, buffer)
 
       val decoded = newWrapper1()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeWrapper1(decoded, buffer)
 
       assertEquals(wrapperId, decoded.id)
       assertTrue(decoded.payload is Success1)
@@ -66,13 +66,14 @@ class UnionTypesTest {
       val wrapperId = TimeId(Nanos(3000000000L))
       val failureId = TimeId(Nanos(4000000000L))
 
-      Wrapper1(
+      val wrapper = Wrapper1(
          id = wrapperId,
          payload = Failure1(timestamp = failureId, errorCode = 404)
-      ).encodeTo(buffer)
+      )
+      wrapAndEncodeWrapper1(wrapper, buffer)
 
       val decoded = newWrapper1()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeWrapper1(decoded, buffer)
 
       assertEquals(wrapperId, decoded.id)
       assertTrue(decoded.payload is Failure1)
@@ -94,11 +95,11 @@ class UnionTypesTest {
       fw.payload(Success1(timestamp = successId, value = 999L))
 
       assertEquals(wrapperId, fw.id())
+      assertEquals(Success1Encoder.TEMPLATE_ID, fw.payloadTemplateId())
 
-      val retrievedPayload = fw.payload()
-      assertTrue(retrievedPayload is Success1)
-      assertEquals(successId, (retrievedPayload as Success1).timestamp)
-      assertEquals(999L, retrievedPayload.value)
+      val success = fw.payloadSuccess1()
+      assertEquals(successId, success.timestamp())
+      assertEquals(999L, success.value())
    }
 
    @Test
@@ -113,11 +114,11 @@ class UnionTypesTest {
       fw.payload(Failure1(timestamp = failureId, errorCode = 500))
 
       assertEquals(wrapperId, fw.id())
+      assertEquals(Failure1Encoder.TEMPLATE_ID, fw.payloadTemplateId())
 
-      val retrievedPayload = fw.payload()
-      assertTrue(retrievedPayload is Failure1)
-      assertEquals(failureId, (retrievedPayload as Failure1).timestamp)
-      assertEquals(500, retrievedPayload.errorCode)
+      val failure = fw.payloadFailure1()
+      assertEquals(failureId, failure.timestamp())
+      assertEquals(500, failure.errorCode())
    }
 
    @Test
@@ -144,29 +145,30 @@ class UnionTypesTest {
    fun readOnlyFlyweight() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
 
-      Wrapper1(
+      val wrapper = Wrapper1(
          id = TimeId(Nanos(11000000000L)),
          payload = Failure1(timestamp = TimeId(Nanos(12000000000L)), errorCode = 403)
-      ).encodeTo(buffer)
+      )
+      wrapAndEncodeWrapper1(wrapper, buffer)
 
-      val fwR = Wrapper1R(buffer, 0)
+      val fwR = Wrapper1RW(buffer, 0)
       assertEquals(TimeId(Nanos(11000000000L)), fwR.id())
 
-      val payload = fwR.payload()
-      assertTrue(payload is Failure1)
-      assertEquals(403, (payload as Failure1).errorCode)
+      assertEquals(Failure1Encoder.TEMPLATE_ID, fwR.payloadTemplateId())
+      val failure = fwR.payloadFailure1()
+      assertEquals(403, failure.errorCode())
    }
 
    @Test
    fun writeOnlyFlyweight() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
-      val fwW = Wrapper1W(buffer, 0)
+      val fwW = Wrapper1RW(buffer, 0)
 
       fwW.id(TimeId(Nanos(13000000000L)))
       fwW.payload(Success1(timestamp = TimeId(Nanos(14000000000L)), value = 888L))
 
       val decoded = newWrapper1()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeWrapper1(decoded, buffer)
 
       assertEquals(TimeId(Nanos(13000000000L)), decoded.id)
       assertTrue(decoded.payload is Success1)
@@ -194,12 +196,12 @@ class UnionTypesTest {
       fw.id(TimeId(Nanos(15000000000L)))
       fw.payload(Success1(timestamp = TimeId.now(), value = 100L))
 
-      assertTrue(fw.payload() is Success1)
+      assertEquals(Success1Encoder.TEMPLATE_ID, fw.payloadTemplateId())
 
       fw.payload(Failure1(timestamp = TimeId.now(), errorCode = 404))
 
-      assertTrue(fw.payload() is Failure1)
-      assertEquals(404, (fw.payload() as Failure1).errorCode)
+      assertEquals(Failure1Encoder.TEMPLATE_ID, fw.payloadTemplateId())
+      assertEquals(404, fw.payloadFailure1().errorCode())
    }
 
    @Test
@@ -217,13 +219,14 @@ class UnionTypesTest {
    fun sealedInterfaceEncodeDecodeRoundtrip() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER2))
 
-      Wrapper2(
+      val wrapper = Wrapper2(
          id = TimeId(Nanos(1000000000L)),
          payload = Service1Message.Success2(timestamp = TimeId(Nanos(2000000000L)), value = 42L)
-      ).encodeTo(buffer)
+      )
+      wrapAndEncodeWrapper2(wrapper, buffer)
 
       val decoded = newWrapper2()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeWrapper2(decoded, buffer)
 
       assertEquals(TimeId(Nanos(1000000000L)), decoded.id)
       assertTrue(decoded.payload is Service1Message.Success2)
@@ -234,13 +237,14 @@ class UnionTypesTest {
    fun sealedInterfaceFailureRoundtrip() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER2))
 
-      Wrapper2(
+      val wrapper = Wrapper2(
          id = TimeId(Nanos(3000000000L)),
          payload = Service1Message.Failure2(timestamp = TimeId(Nanos(4000000000L)), errorCode = 500)
-      ).encodeTo(buffer)
+      )
+      wrapAndEncodeWrapper2(wrapper, buffer)
 
       val decoded = newWrapper2()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeWrapper2(decoded, buffer)
 
       assertEquals(TimeId(Nanos(3000000000L)), decoded.id)
       assertTrue(decoded.payload is Service1Message.Failure2)
@@ -255,13 +259,13 @@ class UnionTypesTest {
       fw.payload(Service1Message.Success2(timestamp = TimeId(Nanos(6000000000L)), value = 999L))
 
       assertEquals(TimeId(Nanos(5000000000L)), fw.id())
-      assertTrue(fw.payload() is Service1Message.Success2)
-      assertEquals(999L, (fw.payload() as Service1Message.Success2).value)
+      assertEquals(Success2Encoder.TEMPLATE_ID, fw.payloadTemplateId())
+      assertEquals(999L, fw.payloadSuccess2().value())
 
       fw.payload(Service1Message.Failure2(timestamp = TimeId(Nanos(7000000000L)), errorCode = 404))
 
-      assertTrue(fw.payload() is Service1Message.Failure2)
-      assertEquals(404, (fw.payload() as Service1Message.Failure2).errorCode)
+      assertEquals(Failure2Encoder.TEMPLATE_ID, fw.payloadTemplateId())
+      assertEquals(404, fw.payloadFailure2().errorCode())
    }
 
    @Test

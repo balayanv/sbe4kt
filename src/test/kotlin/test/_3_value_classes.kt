@@ -23,10 +23,11 @@ class ValueClassesTest {
    fun valueClassPreserved() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG4))
 
-      Msg4(f1 = ValueClass1(underlying = 42)).encodeTo(buffer)
+      val msg = Msg4(f1 = ValueClass1(underlying = 42))
+      wrapAndEncodeMsg4(msg, buffer)
 
       val decoded = newMsg4()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeMsg4(decoded, buffer)
 
       assertEquals(ValueClass1(42), decoded.f1)
    }

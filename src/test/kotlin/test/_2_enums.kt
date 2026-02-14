@@ -46,8 +46,8 @@ class EnumsTest {
 
       for (entry in SomeEnum.entries) {
          val source = Msg3(entry)
-         encodeMsg3(source, buffer)
-         decodeMsg3(target, buffer)
+         wrapAndEncodeMsg3(source, buffer)
+         wrapAndDecodeMsg3(target, buffer)
          assertEquals(entry, target.f1) { "Failed for $entry (ordinal=${entry.ordinal}): got ${target.f1}" }
       }
       println("All ${SomeEnum.entries.size} enum variants encode/decode correctly!")

@@ -18,13 +18,11 @@ internal fun generateTestsSection(message: Message): String {
       |      val buffer = UnsafeBuffer(ByteArray($sizeConstName))
       |      repeat(100) {
       |         val original = random$className()
-      |         val bytesWritten = original.encodeTo(buffer)
-      |         
+      |         wrapAndEncode$className(original, buffer)
+      |
       |         val decoded = new$className()
-      |         val bytesRead = decoded.decodeFrom(buffer)
-      |         
-      |         assertTrue(bytesWritten > 0)
-      |         assertEquals(bytesWritten, bytesRead)
+      |         wrapAndDecode$className(decoded, buffer)
+      |
       |         assertEquals(original, decoded)
       |      }
       |   }
@@ -76,8 +74,6 @@ internal fun KSP.generateTestsForMessage(message: Message) {
    // Write the complete file
    file.bufferedWriter().use {
       it.write("""
-         |@file:Suppress("unused")
-         |
          |package $packageName
          |
          |$importsSection

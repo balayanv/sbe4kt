@@ -130,7 +130,7 @@ internal data class Schema(
          is Message -> byteArraySizes.add(type.size) // Nested messages use ByteArrayN
          is Union -> {
             byteArraySizes.add(type.maxSize)
-            type.allowedTypes.forEach { extractSpecialTypes(it) }
+            type.allowedTypes.forEach { msg -> msg.fields.forEach { extractSpecialTypes(it.type) } }
          }
          else -> {} // primitives, structs don't contain special types to extract
       }

@@ -77,13 +77,23 @@ fun randomTrade(
    amount: Long = Random.nextLong()
 ): Trade
 
-// encode/decode methods that allow to reuse any instance/buffer and return nubmer of bytes encoded/decoded
-fun encodeTrade(instance: Trade, buffer: UnsafeBuffer, offset: Int = 0): Int
-fun decodeTrade(instance: Trade, buffer: UnsafeBuffer, offset: Int = 0): Int
+// convenience encode/decode that wrap buffer and create encoder/decoder if not provided
+fun wrapAndEncodeTrade(source: Trade, buffer: MutableDirectBuffer, offset: Int = 0,
+   headerEncoder: MessageHeaderEncoder = MessageHeaderEncoder(),
+   tradeEncoder: TradeEncoder = TradeEncoder())
+fun wrapAndDecodeTrade(target: Trade, buffer: DirectBuffer, offset: Int = 0,
+   headerDecoder: MessageHeaderDecoder = MessageHeaderDecoder(),
+   tradeDecoder: TradeDecoder = TradeDecoder())
 
-// some extension functions for readability
-fun Trade.encodeTo(buffer: UnsafeBuffer, offset: Int = 0): Int = encodeTrade(this, buffer, offset)
-fun Trade.decodeFrom(buffer: UnsafeBuffer, offset: Int = 0): Int = decodeTrade(this, buffer, offset)
+// low-level encode/decode: no allocation, no wrapping, reuse pre-wrapped encoder/decoder
+fun encodeTrade(source: Trade, buffer: MutableDirectBuffer, offset: Int = 0,
+   headerEncoder: MessageHeaderEncoder, tradeEncoder: TradeEncoder)
+fun decodeTrade(target: Trade, buffer: DirectBuffer, offset: Int = 0,
+   headerDecoder: MessageHeaderDecoder, tradeDecoder: TradeDecoder)
+
+// query encoded/decoded length separately
+fun encodedLength(tradeEncoder: TradeEncoder): Int
+fun decodedLength(tradeDecoder: TradeDecoder): Int
 
 // 3 flyweight classes that allow to work directly with buffers without ever creating instances of our type
 class TradeRW
@@ -149,7 +159,7 @@ and one of the easiest ways to achive such alignment is to put biggest fixed siz
 Otherwise all our fields after symbol would have been misaligned. 
 Because it reordered it to last position, all our fields are aligned. 
 
-To encode/decode data you can simply use the generated extension functions and never deal directly in SBE encoder/decoders.
+To encode/decode data you can simply use the generated functions and never deal directly in SBE encoder/decoders.
 
 ```kotlin
    // lets create a random instance to serialize and deserialize
@@ -159,16 +169,11 @@ To encode/decode data you can simply use the generated extension functions and n
    val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE))
 
    // to serialize all we have to do is
-   encodeTrade(trade, buffer)
-   // or we can use the extension function (which does the same thing)
-   trade.encodeTo(buffer)
+   wrapAndEncodeTrade(trade, buffer)
 
    // to deserialize we can follow exact same pattern
    val newTrade = newTrade()
-
-   decodeTrade(newTrade, buffer)
-   // or we can use the extension function (which does the same thing)
-   newTrade.decodeFrom(buffer)
+   wrapAndDecodeTrade(newTrade, buffer)
 
    // and we can verify that the instances are equal
    assert(trade == newTrade)
@@ -464,11 +469,7 @@ Looking at `Trade` example we can see what the generated flyweight really does w
    fun amount(amount: Long) = apply { encoder.amount(amount) }
 
    fun encodeFrom(source: Trade) = apply {
-      encoder.id(source.id)
-      encoder.timestamp(source.timestamp)
-      encoder.price(source.price)
-      encoder.amount(source.amount)
-      encoder.symbol(source.symbol)
+      encodeTrade(source, buffer, offset, headerEncoder, encoder)
    }
 ```
 
@@ -597,20 +598,20 @@ Here is a summary of what happens for each kind of change.
 
 | Change                          | Result                                                                 | Version     | Wire compatible        |
 |---------------------------------|------------------------------------------------------------------------|-------------|------------------------|
-| Add a field                     | Appended at end with `sinceVersion`                                    | incremented | yes                    |
-| Remove a field                  | **ERROR**, use `@META(removeAfter=N)` instead                          | —           | —                      |
-| Add a new message               | Gets unused ID, no `sinceVersion`                                      | incremented | yes                    |
-| Remove a message                | Warning, its ID is never reused                                        | incremented | yes                    |
+| No `last-sbe-schema.xml`        | Everything treated as brand new, version 0                             | 0           | n/a                    |
 | Reorder fields in source        | No effect, fields keep previous SBE order                              | unchanged   | yes                    |
-| Rename a field                  | **ERROR**, treated as remove + add, removal is not backward compatible | —           | —                      |
+| Add a field                     | Appended at end with `sinceVersion`                                    | incremented | yes                    |
+| Add a new message               | Gets unused ID, no `sinceVersion`                                      | incremented | yes                    |
+| Add an enum value at end        | OK, compiles                                                           | unchanged   | yes                    |
+| Remove a message                | Placeholder message left in xml to reserve its id                      | incremented | yes                    |
 | Rename a message                | Old treated as removed, new gets fresh ID                              | incremented | no (different message) |
+| Remove a field                  | **ERROR**, use `@META(removeAfter=N)` instead                          | —           | —                      |
+| Rename a field                  | **ERROR**, treated as remove + add, removal is not backward compatible | —           | —                      |
 | Change field type               | **ERROR**, compilation fails                                           | —           | —                      |
 | Modify a composite (`isStruct`) | **ERROR**, compilation fails                                           | —           | —                      |
 | Remove an enum value            | **ERROR**, compilation fails                                           | —           | —                      |
 | Reorder enum values             | **ERROR**, compilation fails (ordinals changed)                        | —           | —                      |
-| Add an enum value at end        | OK, compiles                                                           | unchanged   | yes                    |
 | Insert enum value in middle     | **ERROR**, compilation fails (shifts ordinals)                         | —           | —                      |
-| No `last-sbe-schema.xml`        | Everything treated as brand new, version 0                             | 0           | n/a                    |
 
 Note that renaming a field is treated as a remove + add. SBE identifies fields by position not name, so the old field stays at its offset as deprecated space and the new field is appended. This is wire compatible but both schemas grow.
 
@@ -1326,9 +1327,9 @@ fun main() {
    val signal = newSignal()
 
    flyweight.decodeInto(signal)
-   // we can also directly decode we are not using the flyweight
+   // we can also directly decode without the flyweight
    // it does the same thing but with extra steps and checks...
-   // signal.decodeFrom(buffer, 500) 
+   // wrapAndDecodeSignal(signal, buffer, 500)
 
    signal.printSbeLayout()
 }
@@ -1526,23 +1527,23 @@ fun main() {
 16. [x] add support for unions
 17. [x] add support for tagging timestamp diffs in message (telemetry within message)
 18. [x] add support for autogenerated tests
-19. [ ] add support for nullability (adds a bool isSet$field)
-20. [ ] add support for `useFlags` nullability + normal boolean fields stored via bitset `sbe:set`
-21. [ ] support for fixed size `Array` via `@META(size=N)`
-22. [ ] support for fixed size `Map` via `@META(size=N)`
-23. [ ] support for fixed size `Set` via `@META(size=N)`
-24. [ ] add support for some date time api objects
-25. [ ] add support for var length type `String/CharSequence` (disables flyweights)
-26. [ ] add support for var length type `List<T>` (disables flyweights)
-27. [ ] add support for var length type `Map<T>` (disables flyweights)
-28. [ ] add support for var length type `Set<T>` (disables flyweights)
-29. [ ] add support for `javaFriendly` code generation
-30. [x] add support for `version`, `since` via `last-sbe-schema.xml` baseline tracking
-31. [ ] add support for `generateTests` flag to control per message Test generation
-32. [ ] add configuration option `requireMessageIds` (fails compilation if a message has no id)
-33. [ ] add configuration option `requireNotNulls` (cannot use `allowNullableTypes`)
-34. [ ] add configuration option `requireFixedLength` (cannot use `allowVarLengthFields`)
-35. [x] publish `sbe4kt` as artefact to mvn local and make it usable from other projects as a plugin
+19. [x] add support for `version`, `since` via `last-sbe-schema.xml` baseline tracking
+20. [x] publish `sbe4kt` as artefact to mvn local and make it usable from other projects as a plugin
+21. [ ] add support for nullability (adds a bool isSet$field)
+22. [ ] add support for `useFlags` nullability + normal boolean fields stored via bitset `sbe:set`
+23. [ ] support for fixed size `Array` via `@META(size=N)`
+24. [ ] support for fixed size `Map` via `@META(size=N)`
+25. [ ] support for fixed size `Set` via `@META(size=N)`
+26. [ ] add support for some date time api objects
+27. [ ] add support for var length type `String/CharSequence` (disables flyweights)
+28. [ ] add support for var length type `List<T>` (disables flyweights)
+29. [ ] add support for var length type `Map<T>` (disables flyweights)
+30. [ ] add support for var length type `Set<T>` (disables flyweights)
+31. [ ] add support for `javaFriendly` code generation
+32. [ ] add support for `generateTests` flag to control per message Test generation
+33. [ ] add configuration option `requireMessageIds` (fails compilation if a message has no id)
+34. [ ] add configuration option `requireNotNulls` (cannot use `allowNullableTypes`)
+35. [ ] add configuration option `requireFixedLength` (cannot use `allowVarLengthFields`)
 36. [ ] add flags to control strictness of schema evolution
 
 ## Issues/Questions/Notes

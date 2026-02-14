@@ -1,5 +1,5 @@
 val jvmUnsafeAccessArg = "--sun-misc-unsafe-memory-access=allow"
-val jvmAddExportsArg = "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED"
+val jvmAddExportsArg = "--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED"
 
 plugins {
    kotlin("jvm") version "2.3.0"
@@ -35,7 +35,7 @@ dependencies {
 }
 
 application {
-   mainClass.set("example.ExampleKt")
+   mainClass.set("example.CompositeKt")
    applicationDefaultJvmArgs = listOf(jvmUnsafeAccessArg, jvmAddExportsArg)
 }
 

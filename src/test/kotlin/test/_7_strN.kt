@@ -27,10 +27,11 @@ class StrNTest {
    fun shortStringRoundtrips() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE4))
 
-      Trade4(id = 1L, symbol = "HI", timestamp = 2L, price = 3L, amount = 4L).encodeTo(buffer)
+      val trade = Trade4(id = 1L, symbol = "HI", timestamp = 2L, price = 3L, amount = 4L)
+      wrapAndEncodeTrade4(trade, buffer)
 
       val decoded = newTrade4()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeTrade4(decoded, buffer)
 
       assertEquals("HI", decoded.symbol)
    }
@@ -39,10 +40,11 @@ class StrNTest {
    fun fullLengthStringRoundtrips() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE4))
 
-      Trade4(id = 1L, symbol = "12345678901234567890", timestamp = 2L, price = 3L, amount = 4L).encodeTo(buffer)
+      val trade = Trade4(id = 1L, symbol = "12345678901234567890", timestamp = 2L, price = 3L, amount = 4L)
+      wrapAndEncodeTrade4(trade, buffer)
 
       val decoded = newTrade4()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeTrade4(decoded, buffer)
 
       assertEquals("12345678901234567890", decoded.symbol)
    }

@@ -11,8 +11,6 @@ internal fun KSP.generateStr64ValueClassFile(charSetDeclaration: KSClassDeclarat
    val packageName = charSetDeclaration.packageName.asString()
 
    val content = $$"""
-      |@file:Suppress("unused")
-      |
       |package $$packageName
       |
       |import sbe4kt.CodecStr64

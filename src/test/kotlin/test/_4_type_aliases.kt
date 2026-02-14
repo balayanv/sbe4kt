@@ -30,10 +30,11 @@ class TypeAliasNestingTest {
    fun deeplyNestedValueClassRoundtrips() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG5))
 
-      Msg5(f1 = ValueClass3(ValueClass2(Enum2.VALUE2))).encodeTo(buffer)
+      val msg = Msg5(f1 = ValueClass3(ValueClass2(Enum2.VALUE2)))
+      wrapAndEncodeMsg5(msg, buffer)
 
       val decoded = newMsg5()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeMsg5(decoded, buffer)
 
       assertEquals(ValueClass3(ValueClass2(Enum2.VALUE2)), decoded.f1)
    }

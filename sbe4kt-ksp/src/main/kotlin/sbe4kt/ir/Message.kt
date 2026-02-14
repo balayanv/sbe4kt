@@ -145,15 +145,11 @@ internal data class Message(
 
    // When used as a field in another message, handle as nested
    override fun howToEncodeFromSource(encoder: String, field: String, instance: String): String {
-      // encoder is "signalEncoder" or "xyEncoder" etc -> "SignalEncoder" or "XYEncoder"
-      val encoderClass = encoder.replaceFirstChar { it.uppercase() }
-      return "encode${name}($instance.$field, buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${encoderClass}.${field}EncodingOffset())"
+      return "encode${name}($instance.$field, ${field}Encoder)"
    }
 
    override fun howToDecodeIntoTarget(decoder: String, field: String, instance: String): String {
-      // decoder is "signalDecoder" or "xyDecoder" etc -> "SignalDecoder" or "XYDecoder"
-      val decoderClass = decoder.replaceFirstChar { it.uppercase() }
-      return "decode${name}($instance.$field, buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${decoderClass}.${field}EncodingOffset())"
+      return "decode${name}($instance.$field, ${field}Decoder)"
    }
 
    override fun fwSetter(encoder: String, field: String): String {
@@ -212,7 +208,17 @@ internal data class Message(
       imports.add(declaration.importName())
       fields.onEach { imports.addAll(it.type.imports) }
 
-      // Union allowed types' encoder/decoder imports are already included via field.type.imports chain
+      // composite fields need their SBE encoder/decoder imports for the function parameters
+      fields.filter { it.type is Struct }.forEach {
+         imports.add("sbe4kt.${it.type.name}Encoder")
+         imports.add("sbe4kt.${it.type.name}Decoder")
+      }
+
+      // nested message fields need their SBE encoder/decoder imports for the function parameters
+      fields.filter { it.type is Message }.forEach {
+         imports.add("sbe4kt.${it.type.name}Encoder")
+         imports.add("sbe4kt.${it.type.name}Decoder")
+      }
 
       return imports
          .filter { it.substringBeforeLast('.') != packageName && it != packageName }

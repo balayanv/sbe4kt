@@ -28,28 +28,30 @@ internal data class Union(
 
    override fun howToEncodeFromSource(encoder: String, field: String, instance: String): String {
       val encoderClass = encoder.replaceFirstChar { it.uppercase() }
-      val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${encoderClass}.${field}EncodingOffset()"
+      val fieldOffset = "$encoder.offset() + ${encoderClass}.${field}EncodingOffset()"
       val sb = StringBuilder()
       sb.appendLine("when (val value = $instance.$field) {")
       for (type in allowedTypes) {
-         sb.appendLine("   is ${type.name} -> encode${type.name}(value, buffer, $fieldOffset)")
+         val variantEncoder = "${type.name.replaceFirstChar { it.lowercase() }}Encoder"
+         sb.appendLine("   is ${type.name} -> wrapAndEncode${type.name}(value, $encoder.buffer(), $fieldOffset, ${field}HeaderEncoder, $variantEncoder)")
       }
-      sb.appendLine("   else -> throw IllegalArgumentException(\"Unexpected type in union field '$field': \${value::class.qualifiedName}\")")
+      if (typeName == "Any") {
+         sb.appendLine("   else -> throw IllegalArgumentException(\"Unexpected type in union field '$field': \${value::class.qualifiedName}\")")
+      }
       sb.appendLine("}")
       return sb.removeSuffix("\n").toString()
    }
 
    override fun howToDecodeIntoTarget(decoder: String, field: String, instance: String): String {
       val decoderClass = decoder.replaceFirstChar { it.uppercase() }
-      val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${decoderClass}.${field}EncodingOffset()"
+      val fieldOffset = "$decoder.offset() + ${decoderClass}.${field}EncodingOffset()"
       val sb = StringBuilder()
-      sb.appendLine("val ${field}Header = MessageHeaderDecoder()")
-      sb.appendLine("${field}Header.wrap(buffer, $fieldOffset)")
-      sb.appendLine("$instance.$field = when (${field}Header.templateId()) {")
+      sb.appendLine("$instance.$field = when (${field}HeaderDecoder.templateId()) {")
       for (type in allowedTypes) {
-         sb.appendLine("   ${type.name}Encoder.TEMPLATE_ID -> new${type.name}().also { decode${type.name}(it, buffer, $fieldOffset) }")
+         val variantDecoder = "${type.name.replaceFirstChar { it.lowercase() }}Decoder"
+         sb.appendLine("   ${type.name}Encoder.TEMPLATE_ID -> new${type.name}().also { wrapAndDecode${type.name}(it, $decoder.buffer(), $fieldOffset, ${field}HeaderDecoder, $variantDecoder) }")
       }
-      sb.appendLine("   else -> throw IllegalArgumentException(\"Unknown templateId in union field '$field': \${${field}Header.templateId()}\")")
+      sb.appendLine("   else -> throw IllegalArgumentException(\"Unknown templateId in union field '$field': \${${field}HeaderDecoder.templateId()}\")")
       sb.appendLine("}")
       return sb.removeSuffix("\n").toString()
    }

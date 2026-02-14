@@ -37,10 +37,10 @@ class FlyweightsTest {
    fun writeOnlyThenReadOnly() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE2))
 
-      Trade2W(buffer, 0)
+      Trade2RW(buffer, 0)
          .id(100L).symbol(200).timestamp(300L).price(400L).amount(500L)
 
-      val r = Trade2R(buffer, 0)
+      val r = Trade2RW(buffer, 0)
       assertEquals(100L, r.id())
       assertEquals(200, r.symbol())
       assertEquals(300L, r.timestamp())
@@ -57,7 +57,7 @@ class FlyweightsTest {
       fw.wrap(buffer, SBE_SIZE_TRADE2)
       fw.id(2L)
 
-      assertEquals(1L, Trade2R(buffer, 0).id())
-      assertEquals(2L, Trade2R(buffer, SBE_SIZE_TRADE2).id())
+      assertEquals(1L, Trade2RW(buffer, 0).id())
+      assertEquals(2L, Trade2RW(buffer, SBE_SIZE_TRADE2).id())
    }
 }

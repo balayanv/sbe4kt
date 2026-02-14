@@ -20,10 +20,11 @@ class FPDTest {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG6))
       val sum = FPD5.fromExact("1111.11111") + FPD5.fromExact("22.22222")
 
-      Msg6(f1 = sum).encodeTo(buffer)
+      val msg = Msg6(f1 = sum)
+      wrapAndEncodeMsg6(msg, buffer)
 
       val decoded = newMsg6()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeMsg6(decoded, buffer)
 
       assertEquals("1133.33333", decoded.f1.toString())
    }
@@ -33,10 +34,11 @@ class FPDTest {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG7))
       val sum = FPD.fromExact("1111.11111") + FPD.fromExact("22.222")
 
-      Msg7(f1 = sum).encodeTo(buffer)
+      val msg = Msg7(f1 = sum)
+      wrapAndEncodeMsg7(msg, buffer)
 
       val decoded = newMsg7()
-      decoded.decodeFrom(buffer)
+      wrapAndDecodeMsg7(decoded, buffer)
 
       assertEquals("1133.33311", decoded.f1.toString())
    }

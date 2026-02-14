@@ -14,7 +14,6 @@
          <type name='version' primitiveType='uint16'/>
       </composite>
 
-      <type name='ByteArray20' primitiveType='uint8' length='20'/>
       <type name='ByteArray24' primitiveType='uint8' length='24'/>
 
       <type name='CharArray20' primitiveType='char' length='20' characterEncoding='US-ASCII'/>
