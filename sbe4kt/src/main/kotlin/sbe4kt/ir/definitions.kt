@@ -147,6 +147,23 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
       return Union(allowedTypes, simpleName.asString())
    }
 
+   if (declaration is KSClassDeclaration && declaration.isSealed()) {
+      val sealedSubclasses = declaration.getSealedSubclasses().toList()
+      require(sealedSubclasses.isNotEmpty()) { "Sealed type '${declaration.simpleName()}' has no subclasses" }
+      val allowedTypes = sealedSubclasses.map { subclass ->
+         require(subclass.sbeAnnotation() != null) { "Sealed subclass '${subclass.simpleName()}' must be annotated with @SBE" }
+         require(!subclass.sbeAnnotation().isStruct()) { "Union types must be @SBE messages, not structs: '${subclass.simpleName()}'" }
+         subclass.requireMutableDataClass()
+         Message(subclass)
+      }
+      return Union(
+         allowedTypes = allowedTypes,
+         fieldName = simpleName.asString(),
+         typeName = declaration.simpleName(),
+         typePackage = declaration.packageName.asString()
+      )
+   }
+
    if (size > 0) {
       if (declaration.qualifiedName() == "kotlin.ByteArray") {
          require(size > 0) { "ByteArray size must be positive, got $size" }

@@ -212,7 +212,7 @@ private fun generateUnionFwGetters(unionFields: List<Field>, className: String):
       val union = field.type as Union
       val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${field.name}EncodingOffset()"
       buildString {
-         appendLine("fun ${field.name}(): Any {")
+         appendLine("fun ${field.name}(): ${union.name} {")
          appendLine("   val ${field.name}Header = MessageHeaderDecoder()")
          appendLine("   ${field.name}Header.wrap(buffer, $fieldOffset)")
          appendLine("   return when (${field.name}Header.templateId().toInt()) {")
@@ -232,7 +232,7 @@ private fun generateUnionFwSetters(unionFields: List<Field>, className: String):
       val union = field.type as Union
       val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${field.name}EncodingOffset()"
       buildString {
-         appendLine("fun ${field.name}(${field.name}: Any) = apply {")
+         appendLine("fun ${field.name}(${field.name}: ${union.name}) = apply {")
          appendLine("   when (${field.name}) {")
          for (type in union.allowedTypes) {
             appendLine("      is ${type.name} -> encode${type.name}(${field.name}, buffer, $fieldOffset)")
