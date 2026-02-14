@@ -21,19 +21,20 @@ data class Failure1(var timestamp: TimeId, var errorCode: Int)
 @SBE
 data class Success1(var timestamp: TimeId, var value: Long)
 
-sealed interface Service1Message
-
-@SBE
-data class Failure2(var timestamp: TimeId, var errorCode: Int) : Service1Message
-
-@SBE
-data class Success2(var timestamp: TimeId, var value: Long) : Service1Message
-
 @SBE
 data class Wrapper2(
    var id: TimeId,
    var payload: Service1Message,
 )
+
+sealed interface Service1Message{
+
+   @SBE
+   data class Failure2(var timestamp: TimeId, var errorCode: Int) : Service1Message
+
+   @SBE
+   data class Success2(var timestamp: TimeId, var value: Long) : Service1Message
+}
 
 class UnionTypesTest {
 
@@ -218,15 +219,15 @@ class UnionTypesTest {
 
       Wrapper2(
          id = TimeId(Nanos(1000000000L)),
-         payload = Success2(timestamp = TimeId(Nanos(2000000000L)), value = 42L)
+         payload = Service1Message.Success2(timestamp = TimeId(Nanos(2000000000L)), value = 42L)
       ).encodeTo(buffer)
 
       val decoded = newWrapper2()
       decoded.decodeFrom(buffer)
 
       assertEquals(TimeId(Nanos(1000000000L)), decoded.id)
-      assertTrue(decoded.payload is Success2)
-      assertEquals(42L, (decoded.payload as Success2).value)
+      assertTrue(decoded.payload is Service1Message.Success2)
+      assertEquals(42L, (decoded.payload as Service1Message.Success2).value)
    }
 
    @Test
@@ -235,15 +236,15 @@ class UnionTypesTest {
 
       Wrapper2(
          id = TimeId(Nanos(3000000000L)),
-         payload = Failure2(timestamp = TimeId(Nanos(4000000000L)), errorCode = 500)
+         payload = Service1Message.Failure2(timestamp = TimeId(Nanos(4000000000L)), errorCode = 500)
       ).encodeTo(buffer)
 
       val decoded = newWrapper2()
       decoded.decodeFrom(buffer)
 
       assertEquals(TimeId(Nanos(3000000000L)), decoded.id)
-      assertTrue(decoded.payload is Failure2)
-      assertEquals(500, (decoded.payload as Failure2).errorCode)
+      assertTrue(decoded.payload is Service1Message.Failure2)
+      assertEquals(500, (decoded.payload as Service1Message.Failure2).errorCode)
    }
 
    @Test
@@ -251,28 +252,28 @@ class UnionTypesTest {
       val fw = Wrapper2RW()
 
       fw.id(TimeId(Nanos(5000000000L)))
-      fw.payload(Success2(timestamp = TimeId(Nanos(6000000000L)), value = 999L))
+      fw.payload(Service1Message.Success2(timestamp = TimeId(Nanos(6000000000L)), value = 999L))
 
       assertEquals(TimeId(Nanos(5000000000L)), fw.id())
-      assertTrue(fw.payload() is Success2)
-      assertEquals(999L, (fw.payload() as Success2).value)
+      assertTrue(fw.payload() is Service1Message.Success2)
+      assertEquals(999L, (fw.payload() as Service1Message.Success2).value)
 
-      fw.payload(Failure2(timestamp = TimeId(Nanos(7000000000L)), errorCode = 404))
+      fw.payload(Service1Message.Failure2(timestamp = TimeId(Nanos(7000000000L)), errorCode = 404))
 
-      assertTrue(fw.payload() is Failure2)
-      assertEquals(404, (fw.payload() as Failure2).errorCode)
+      assertTrue(fw.payload() is Service1Message.Failure2)
+      assertEquals(404, (fw.payload() as Service1Message.Failure2).errorCode)
    }
 
    @Test
    fun sealedInterfaceExhaustiveWhen() {
       val msg = Wrapper2(
          id = TimeId.now(),
-         payload = Success2(TimeId.now(), 42L)
+         payload = Service1Message.Success2(TimeId.now(), 42L)
       )
 
       val result = when (msg.payload) {
-         is Success2 -> "success"
-         is Failure2 -> "failure"
+         is Service1Message.Success2 -> "success"
+         is Service1Message.Failure2 -> "failure"
       }
       assertEquals("success", result)
    }
@@ -281,7 +282,7 @@ class UnionTypesTest {
    fun sealedInterfacePrintLayout() {
       Wrapper2(
          id = TimeId.now(),
-         payload = Success2(TimeId.now(), 42L)
+         payload = Service1Message.Success2(TimeId.now(), 42L)
       ).printSbeLayout()
    }
 }

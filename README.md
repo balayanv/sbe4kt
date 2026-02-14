@@ -485,6 +485,174 @@ Note they are completely different classes, you cannot cast `RW` into `R/W`.
 
 When using these flyweights your buffers are your ojbects, there is no actual serialization going on.
 
+### Schema Evolution
+
+SBE4KT tracks schema changes automatically using `last-sbe-schema.xml` as a baseline.
+Every time you compile, the generated schema is copied to `src/{main|test}/resources/current-sbe-schema.xml`.
+When you release a version you rename `current-sbe-schema.xml` to `last-sbe-schema.xml`,
+this becomes the baseline for the next round of changes.
+
+Lets walk trough a simple example. We start with a Trade message.
+
+```kotlin
+@SBE
+data class Trade(
+   var id: Long,
+   var price: Long,
+   var amount: Long,
+)
+```
+
+After compilation with no `last-sbe-schema.xml` the generated schema is version 0.
+
+```xml
+<sbe:messageSchema version='0'>
+   <sbe:message name='Trade' id='1' description='Trade'>
+      <field name='id' id='1' type='int64'/>
+      <field name='price' id='2' type='int64'/>
+      <field name='amount' id='3' type='int64'/>
+   </sbe:message>
+</sbe:messageSchema>
+```
+
+Now we "release" by copying `current-sbe-schema.xml` to `last-sbe-schema.xml`.
+Then we add a new field.
+
+```kotlin
+@SBE
+data class Trade(
+   var id: Long,
+   var price: Long,
+   var amount: Long,
+   var timestamp: Long,
+)
+```
+
+After compilation the schema becomes version 1. The new field is appended at the end with `sinceVersion`.
+Existing fields preserve their IDs and positions.
+
+```xml
+<sbe:messageSchema version='1'>
+   <sbe:message name='Trade' id='1' description='Trade'>
+      <field name='id' id='1' type='int64'/>
+      <field name='price' id='2' type='int64'/>
+      <field name='amount' id='3' type='int64'/>
+      <field name='timestamp' id='4' type='int64' sinceVersion='1'/>
+   </sbe:message>
+</sbe:messageSchema>
+```
+
+We release again and then remove `timestamp` while adding a new `flags` field.
+
+```kotlin
+@SBE
+data class Trade(
+   var id: Long,
+   var price: Long,
+   var amount: Long,
+   var flags: Long,
+)
+```
+
+The schema becomes version 2. The removed field stays in the schema with `deprecated` pointing to the version it was removed.
+The new field is appended after all previous fields (including deprecated ones) with its own `sinceVersion`.
+An explicit `blockLength` is added to preserve space occupied by deprecated fields.
+
+```xml
+<sbe:messageSchema version='2'>
+   <sbe:message name='Trade' id='1' blockLength='32' description='Trade'>
+      <field name='id' id='1' type='int64'/>
+      <field name='price' id='2' type='int64'/>
+      <field name='amount' id='3' type='int64'/>
+      <field name='timestamp' id='4' type='int64' sinceVersion='1' deprecated='2'/>
+      <field name='flags' id='5' type='int64' sinceVersion='2'/>
+   </sbe:message>
+</sbe:messageSchema>
+```
+
+The diff between version 1 and 2 is clean and readable.
+
+```diff
+-                   version='1'
++                   version='2'
+-   <sbe:message name='Trade' id='1' description='Trade'>
++   <sbe:message name='Trade' id='1' blockLength='32' description='Trade'>
+-      <field name='timestamp' id='4' type='int64' sinceVersion='1'/>
++      <field name='timestamp' id='4' type='int64' sinceVersion='1' deprecated='2'/>
++      <field name='flags' id='5' type='int64' sinceVersion='2'/>
+```
+
+New messages automatically get IDs that do not collide with any previously used ID (including from removed messages).
+Generated kotlin code only uses the fields that exist in your data class, deprecated fields are invisible to it.
+
+If you attempt a breaking change such as changing a field type the compilation will fail.
+
+```text
+e: [ksp] BREAKING CHANGE: Field 'price' in message 'Trade' changed type: 'int64' -> 'int32'
+```
+
+This mechanism entirely relies on existance of `last-sbe-schema.xml`, if you do not create it (indicating a released version) then using previous schema is bypassed entirely and your current schema is treated as brand new.
+
+Here is a summary of what happens for each kind of change.
+
+| Change                          | Result                                                                 | Version     | Wire compatible        |
+|---------------------------------|------------------------------------------------------------------------|-------------|------------------------|
+| Add a field                     | Appended at end with `sinceVersion`                                    | incremented | yes                    |
+| Remove a field                  | **ERROR**, use `@META(removeAfter=N)` instead                          | —           | —                      |
+| Add a new message               | Gets unused ID, no `sinceVersion`                                      | incremented | yes                    |
+| Remove a message                | Warning, its ID is never reused                                        | incremented | yes                    |
+| Reorder fields in source        | No effect, fields keep previous SBE order                              | unchanged   | yes                    |
+| Rename a field                  | **ERROR**, treated as remove + add, removal is not backward compatible | —           | —                      |
+| Rename a message                | Old treated as removed, new gets fresh ID                              | incremented | no (different message) |
+| Change field type               | **ERROR**, compilation fails                                           | —           | —                      |
+| Modify a composite (`isStruct`) | **ERROR**, compilation fails                                           | —           | —                      |
+| Remove an enum value            | **ERROR**, compilation fails                                           | —           | —                      |
+| Reorder enum values             | **ERROR**, compilation fails (ordinals changed)                        | —           | —                      |
+| Add an enum value at end        | OK, compiles                                                           | unchanged   | yes                    |
+| Insert enum value in middle     | **ERROR**, compilation fails (shifts ordinals)                         | —           | —                      |
+| No `last-sbe-schema.xml`        | Everything treated as brand new, version 0                             | 0           | n/a                    |
+
+Note that renaming a field is treated as a remove + add. SBE identifies fields by position not name, so the old field stays at its offset as deprecated space and the new field is appended. This is wire compatible but both schemas grow.
+
+#### Removing fields with `@META(removeAfter=N)`
+
+Directly removing a field is a compilation error because it breaks the wire format.
+To safely remove a field use `@META(removeAfter=N)` where N is a future schema version.
+
+```kotlin
+@SBE
+data class Trade(
+   var id: Long,
+   var price: Long,
+   @META(removeAfter = 5)
+   var timestamp: Long,
+)
+```
+
+This marks the field with `deprecated='5'` in the SBE schema immediately.
+The field still exists in your data class and generated code, but consumers of the schema can see it is scheduled for removal.
+
+When you are ready to actually remove it, delete the field from your data class.
+
+```kotlin
+@SBE
+data class Trade(
+   var id: Long,
+   var price: Long,
+)
+```
+
+Because the previous schema already had `deprecated` on that field, the removal is allowed.
+The field stays in the SBE schema as `timestampRemoved` to preserve the wire layout, and `blockLength` accounts for its space.
+
+```xml
+<field name='timestampRemoved' id='3' type='int64' deprecated='5'/>
+```
+
+If you change your mind before removing, just remove the `@META(removeAfter=5)` annotation and the deprecation is cleared from the schema.
+
+If the schema version reaches or exceeds `removeAfter` while the field is still in source, compilation fails with a message telling you to either remove the annotation, increase the version number, or remove the field.
+
 ### Packed Strings with custom encoding (str64)
 
 When working with a string field you can save on space by defining custom charset of exactly what characters are allowed. 
@@ -1369,17 +1537,18 @@ fun main() {
 27. [ ] add support for var length type `Map<T>` (disables flyweights)
 28. [ ] add support for var length type `Set<T>` (disables flyweights)
 29. [ ] add support for `javaFriendly` code generation
-30. [ ] add support for `version`, `since`
+30. [x] add support for `version`, `since` via `last-sbe-schema.xml` baseline tracking
 31. [ ] add support for `generateTests` flag to control per message Test generation
 32. [ ] add configuration option `requireMessageIds` (fails compilation if a message has no id)
 33. [ ] add configuration option `requireNotNulls` (cannot use `allowNullableTypes`)
 34. [ ] add configuration option `requireFixedLength` (cannot use `allowVarLengthFields`)
-35. [ ] publish `sbe4kt` as artefact to mvn local and make it usable from other projects as a plugin
+35. [x] publish `sbe4kt` as artefact to mvn local and make it usable from other projects as a plugin
+36. [ ] add flags to control strictness of schema evolution
 
 ## Issues/Questions/Notes
 
 1. [ ] codegen can override each other (name collisions/file collisions), same name enums...
-2. [ ] dont like reinventing this encoding/decoding for str64 and strN value classes, maybe better solution out there?
+2. [ ] dont like reinventing this encoding/decoding for str64 and strN value classes, maybe better solution out there? (https://aeron.io/product-features/sbe-domain-mapper-for-java/ has Views of various types)
 3. [ ] try cyclical dependencies
 4. [ ] using int8/int16 directly instead of sbe enum? is there a performance overhead when using sbe enums?
 5. [ ] why is sbe using short when underlying is byte?
@@ -1388,6 +1557,7 @@ fun main() {
 8. [ ] maybe i should make str64 types just add `S64` instead of `Str64`
 9. [ ] union support when one of types are structs is messy, needs revisit and proper solution.
 10. [ ] make validation more strict since @SBE and @META tags have multiple purposes, user can create nonsensical combinations of arguments (fail fast)
+11. [ ] schema evolution 
 
 ## Features to experiment with
 
@@ -1432,13 +1602,124 @@ this runs Gradle in a mode where it expects a debugger to attach, then run `ksp_
 Now your breakpoints under `sbe4kt` module won't be ignored.
 
 ---
+## Artifacts
+
+SBE4KT has three modules.
+
+| Module          | Purpose                                                                                                                         |
+|-----------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `sbe4kt-lib`    | Annotations (`@SBE`, `@META`) and runtime types (`FPD`, `TimeId`, `CharSet`, `MicroTag4`, etc). Depends on Agrona transitively. |
+| `sbe4kt-ksp`    | KSP symbol processor that generates SBE schemas and Kotlin extensions. Compile-time only.                                       |
+| `sbe4kt-gradle` | Gradle plugin that automates SBE tool invocation, task wiring, and source set configuration.                                    |
+
+### Publishing
+
+Bump the version in `sbe4kt-lib/build.gradle.kts`, `sbe4kt-ksp/build.gradle.kts`, and `sbe4kt-gradle/build.gradle.kts`, then publish.
+
+```bash
+./gradlew :sbe4kt-lib:publishToMavenLocal :sbe4kt-ksp:publishToMavenLocal
+cd sbe4kt-gradle && ./gradlew publishToMavenLocal
+```
+
+This publishes four artifacts to `~/.m2/repository/sbe4kt/`:
+
+```
+sbe4kt-lib-{version}.jar           runtime library
+sbe4kt-ksp-{version}.jar           KSP processor
+sbe4kt-gradle-{version}.jar        Gradle plugin
+sbe4kt.gradle.plugin-{version}.pom plugin marker (so Gradle can resolve id("sbe4kt"))
+```
+
+### Using from another Gradle project
+
+Add `mavenLocal()` to your plugin and dependency repositories, then apply the plugin and add the dependencies.
+
+```kotlin
+// settings.gradle.kts
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+```
+
+```kotlin
+// build.gradle.kts
+plugins {
+   kotlin("jvm") version "2.3.0"
+   id("com.google.devtools.ksp") version "2.3.5"
+   id("sbe4kt") version "0.1.0"
+   application
+}
+
+kotlin { jvmToolchain(25) }
+
+repositories {
+   mavenLocal()
+   mavenCentral()
+}
+
+dependencies {
+   implementation("sbe4kt:sbe4kt-lib:0.1.0")
+   ksp("sbe4kt:sbe4kt-ksp:0.1.0")
+   implementation("uk.co.real-logic:sbe-all:1.37.1")
+}
+
+application {
+   mainClass.set("example.ExampleKt")
+   applicationDefaultJvmArgs = listOf(
+      "--sun-misc-unsafe-memory-access=allow",
+      "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED",
+   )
+}
+
+sourceSets {
+   main {
+      kotlin { srcDirs("src/main/kotlin", layout.buildDirectory.dir("generated/ksp/main/kotlin")) }
+   }
+}
+```
+
+That is all you need. The `sbe4kt` Gradle plugin handles the rest:
+it creates a `sbeCompiler` configuration, registers `sbeGenerateMain`/`sbeGenerateTest` tasks,
+wires them to KSP, adds generated SBE Java sources to your source sets,
+and configures JVM args for tests.
+
+Now annotate your data classes with `@SBE` and compile.
+
+```kotlin
+@SBE
+data class Trade(
+   var id: Long,
+   var price: Long,
+   var amount: Long,
+)
+
+fun main() {
+   randomTrade().printSbeLayout()
+}
+```
+
+### What the Gradle plugin does
+
+The plugin (`id("sbe4kt")`) replaces manual configuration that would otherwise look like this:
+
+* Creates a `sbeCompiler` configuration with `sbe-all` on the classpath
+* Registers `sbeGenerateMain` and `sbeGenerateTest` tasks that invoke `SbeTool` against the KSP-generated `sbe-schema.xml`
+* Wires task dependencies: `kspKotlin → sbeGenerateMain → compileKotlin` (same for test)
+* Adds `build/generated/sbe/{main|test}/java` to the Java source sets
+* Configures JVM args for test tasks (Agrona unsafe access)
+
+---
 ## Code Structure
 
-Entry point is for the plugin is [Sbe4Kt.kt](sbe4kt/src/main/kotlin/sbe4kt/Sbe4Kt.kt),
-It will detect all the classes annotated with [SBE.kt](sbe4kt/src/main/kotlin/sbe4kt/SBE.kt),  
-build an Intermediate Represenation of the Schema defined under [ir](sbe4kt/src/main/kotlin/sbe4kt/ir),
-then generate SBE schema via [sbe-generator](sbe4kt/src/main/kotlin/sbe4kt/sbe)
-and kotlin extensions via [kt-generator](sbe4kt/src/main/kotlin/sbe4kt/kt).
+Entry point is for the plugin is [Sbe4Kt.kt](sbe4kt-ksp/src/main/kotlin/sbe4kt/Sbe4Kt.kt),
+It will detect all the classes annotated with [SBE.kt](sbe4kt-lib/src/main/kotlin/sbe4kt/SBE.kt),
+build an Intermediate Represenation of the Schema defined under [ir](sbe4kt-ksp/src/main/kotlin/sbe4kt/ir),
+then generate SBE schema via [sbe-generator](sbe4kt-ksp/src/main/kotlin/sbe4kt/sbe)
+and kotlin extensions via [kt-generator](sbe4kt-ksp/src/main/kotlin/sbe4kt/kt).
 
 Anything that is of type `IR.Root` is a message root which recursively resolves the intermediate fields and their `IR.Leaf` types.
 Each `IR.Leaf` type contains generic information ONLY.
