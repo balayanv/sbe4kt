@@ -111,18 +111,7 @@ internal data class Message(
       imports.add("sbe4kt.${name}Decoder")
       fields.onEach { imports.addAll(it.type.imports) }
 
-      // Add encoder/decoder imports for union composite types and their allowed types
-      fields.filter { it.type is Union }.forEach { field ->
-         val union = field.type as Union
-         val baseName = union.sbeName.replaceFirstChar { it.uppercase() }
-         imports.add("sbe4kt.${baseName}Encoder")
-         imports.add("sbe4kt.${baseName}Decoder")
-         // add imports for Message types (structs don't have standalone encoders/decoders)
-         union.allowedTypes.filterIsInstance<Message>().forEach { allowedType ->
-            imports.add("sbe4kt.${allowedType.name}Encoder")
-            imports.add("sbe4kt.${allowedType.name}Decoder")
-         }
-      }
+      // Union allowed types' encoder/decoder imports are already included via field.type.imports chain
 
       return imports
          .filter { it.substringBeforeLast('.') != packageName && it != packageName }

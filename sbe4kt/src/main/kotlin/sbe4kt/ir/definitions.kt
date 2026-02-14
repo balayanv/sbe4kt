@@ -47,7 +47,6 @@ internal data class Schema(
 ) {
    val structs: ArrayList<Struct> = ArrayList()
    val messages: ArrayList<Message> = ArrayList()
-   val unionFields: ArrayList<Union> = ArrayList()
    val byteArraySizes = HashSet<Int>()
    val fixedStrings = HashSet<StringN>()
 
@@ -99,7 +98,6 @@ internal data class Schema(
          is Value -> extractSpecialTypes(type.underlyingType)
          is Message -> byteArraySizes.add(type.size) // Nested messages use ByteArrayN
          is Union -> {
-            unionFields.add(type)
             byteArraySizes.add(type.maxSize)
             type.allowedTypes.forEach { extractSpecialTypes(it) }
          }
@@ -142,12 +140,9 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
       require(declaration.qualifiedName() == "kotlin.Any") { "Union field '${simpleName.asString()}' must be of type Any, got ${declaration.qualifiedName()}" }
       val allowedTypes = oneOf.map { typeDecl ->
          require(typeDecl.sbeAnnotation() != null) { "Union type '${typeDecl.simpleName()}' must be annotated with @SBE" }
+         require(!typeDecl.sbeAnnotation().isStruct()) { "Union types must be @SBE messages, not structs: '${typeDecl.simpleName()}'" }
          typeDecl.requireMutableDataClass()
-         if (typeDecl.sbeAnnotation().isStruct()) {
-            Struct(typeDecl)
-         } else {
-            Message(typeDecl)
-         }
+         Message(typeDecl)
       }
       return Union(allowedTypes, simpleName.asString())
    }

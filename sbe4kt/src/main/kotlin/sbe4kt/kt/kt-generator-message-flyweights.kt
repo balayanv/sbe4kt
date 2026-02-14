@@ -1,7 +1,9 @@
 package sbe4kt.kt
 
 import sbe4kt.ir.Composite
+import sbe4kt.ir.Field
 import sbe4kt.ir.Message
+import sbe4kt.ir.Union
 import sbe4kt.util.indent
 import sbe4kt.util.sbeSizeConstant
 import sbe4kt.util.trimTemplate
@@ -14,17 +16,17 @@ internal fun generateFlyweightsSection(message: Message): String {
    val fieldsSbeOrder = message.fields.sortedBy { it.sbeOrder }
    val compositFields = fieldsDecOrder.filter { it.type is Composite }
    val nestedMessageFields = fieldsDecOrder.filter { it.type is Message }
+   val unionFields = fieldsDecOrder.filter { it.type is Union }
 
-   // Include all fields including unions - Union implements fwGetter/fwSetter properly
-   val fieldsForFlyweights = fieldsDecOrder
+   val fieldsForFlyweights = fieldsDecOrder.filter { it.type !is Union }
 
    val fwEncoderBody = fieldsSbeOrder.joinToString("\n") {
-      val encoderParam = if (it.type is Message) "${className.replaceFirstChar { it.lowercase() }}Encoder" else "encoder"
+      val encoderParam = if (it.type is Message || it.type is Union) "${className.replaceFirstChar { it.lowercase() }}Encoder" else "encoder"
       it.type.howToEncodeFromSource(encoderParam, it.name, "source")
    }
 
    val fwDecoderBody = fieldsSbeOrder.joinToString("\n") {
-      val decoderParam = if (it.type is Message) "${className.replaceFirstChar { it.lowercase() }}Decoder" else "decoder"
+      val decoderParam = if (it.type is Message || it.type is Union) "${className.replaceFirstChar { it.lowercase() }}Decoder" else "decoder"
       it.type.howToDecodeIntoTarget(decoderParam, it.name, "target")
    }
 
@@ -44,6 +46,10 @@ internal fun generateFlyweightsSection(message: Message): String {
    // For W (write-only) flyweights
    val fwFieldFWsW = compositFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}W(encoder.${it.name}())" }
    val fwFieldFwGettersW = compositFields.joinToString("\n") { "fun ${it.name}FW() = ${it.name}FW" }
+
+   // union field getters/setters (handled separately because they need className for offset computation)
+   val unionFwGetters = generateUnionFwGetters(unionFields, className)
+   val unionFwSetters = generateUnionFwSetters(unionFields, className)
 
    // flyweights of nested @SBE types
    val nestedMessageFWsRW = nestedMessageFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}RW(buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${it.name}EncodingOffset())" }
@@ -95,8 +101,10 @@ internal fun generateFlyweightsSection(message: Message): String {
       |${nestedMessageFwGetters.indent(3)}
       |
       |${fwGetters.indent(3)}
+      |${unionFwGetters.indent(3)}
       |
       |${fwSetters.indent(3)}
+      |${unionFwSetters.indent(3)}
       |
       |   fun encodeFrom(source: $className) = apply {
       |${fwEncoderBody.indent(6)}
@@ -144,6 +152,7 @@ internal fun generateFlyweightsSection(message: Message): String {
       |${nestedMessageFwGetters.indent(3)}
       |
       |${fwGetters.indent(3)}
+      |${unionFwGetters.indent(3)}
       |
       |   fun decodeInto(target: $className = new$className()) = apply {
       |${fwDecoderBody.indent(6)}
@@ -188,10 +197,49 @@ internal fun generateFlyweightsSection(message: Message): String {
       |${nestedMessageFwGetters.indent(3)}
       |
       |${fwSetters.indent(3)}
+      |${unionFwSetters.indent(3)}
       |
       |   fun encodeFrom(source: $className) = apply {
       |${fwEncoderBody.indent(6)}
       |   }
       |}
       |""".trimTemplate()
+}
+
+private fun generateUnionFwGetters(unionFields: List<Field>, className: String): String {
+   if (unionFields.isEmpty()) return ""
+   return unionFields.joinToString("\n") { field ->
+      val union = field.type as Union
+      val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${field.name}EncodingOffset()"
+      buildString {
+         appendLine("fun ${field.name}(): Any {")
+         appendLine("   val ${field.name}Header = MessageHeaderDecoder()")
+         appendLine("   ${field.name}Header.wrap(buffer, $fieldOffset)")
+         appendLine("   return when (${field.name}Header.templateId().toInt()) {")
+         for (type in union.allowedTypes) {
+            appendLine("      ${type.name}Encoder.TEMPLATE_ID -> new${type.name}().also { decode${type.name}(it, buffer, $fieldOffset) }")
+         }
+         appendLine("      else -> throw IllegalArgumentException(\"Unknown templateId in union field '${field.name}': \${${field.name}Header.templateId()}\")")
+         appendLine("   }")
+         append("}")
+      }
+   }
+}
+
+private fun generateUnionFwSetters(unionFields: List<Field>, className: String): String {
+   if (unionFields.isEmpty()) return ""
+   return unionFields.joinToString("\n") { field ->
+      val union = field.type as Union
+      val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${field.name}EncodingOffset()"
+      buildString {
+         appendLine("fun ${field.name}(${field.name}: Any) = apply {")
+         appendLine("   when (${field.name}) {")
+         for (type in union.allowedTypes) {
+            appendLine("      is ${type.name} -> encode${type.name}(${field.name}, buffer, $fieldOffset)")
+         }
+         appendLine("      else -> throw IllegalArgumentException(\"Unexpected type in union field '${field.name}': \${${field.name}::class.qualifiedName}\")")
+         appendLine("   }")
+         append("}")
+      }
+   }
 }

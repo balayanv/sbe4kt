@@ -17,7 +17,6 @@ internal fun KSP.generateSbe() {
    val byteArrayTypes = ir.byteArraySizes.joinToString("\n") { generateByteArrayType(it) }
    val stringTypes = ir.fixedStrings.joinToString("\n") { generateStringType(it) }
    val structs = ir.structs.joinToString("\n") { generateCompositeType(it) }
-   val unions = ir.unionFields.joinToString("\n") { generateUnionComposite(it) }
    val messages = ir.messages.joinToString("\n") { generateMessageBody(it) }
 
    val xml = """
@@ -42,8 +41,6 @@ internal fun KSP.generateSbe() {
       |${stringTypes.indent(6)}
       |
       |${structs.indent(6)}
-      |
-      |${unions.indent(6)}
       |   </types>
       |
       |${messages.indent(3)}
@@ -111,15 +108,6 @@ private fun generateCompositeField(fieldName: String, type: IR.Leaf, offset: Int
          "<ref name='$fieldName' type='${type.sbeName}'/>"
       }
    }
-}
-
-private fun generateUnionComposite(union: Union): String {
-   return """
-      |<composite name='${union.sbeName}'>
-      |   <type name='type' primitiveType='int32'/>
-      |   <type name='data' primitiveType='uint8' length='${union.maxSize}'/>
-      |</composite>
-      |""".trimMargin()
 }
 
 private fun generateByteArrayType(size: Int) = "<type name='ByteArray$size' primitiveType='uint8' length='$size'/>"

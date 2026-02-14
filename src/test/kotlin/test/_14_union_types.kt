@@ -15,11 +15,13 @@ data class Wrapper1(
    var payload: Any,
 )
 
-@SBE(id = 102)
+@SBE
 data class Failure1(var timestamp: TimeId, var errorCode: Int)
 
-@SBE(id = 101)
+@SBE
 data class Success1(var timestamp: TimeId, var value: Long)
+
+
 
 class UnionTypesTest {
 
