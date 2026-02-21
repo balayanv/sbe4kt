@@ -208,6 +208,13 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
       }
    }
 
+   val tags = meta.tags()
+   if (tags.isNotEmpty()) {
+      val resolved = recursiveResolveLeaf(declaration)
+      require(resolved is Value) { "tags field must be a value class, got ${resolved::class.simpleName}" }
+      return Tags(resolved, tags)
+   }
+
    return recursiveResolveLeaf(declaration)
 }
 
