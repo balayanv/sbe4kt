@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
     kotlin("jvm")
     `maven-publish`
@@ -12,11 +14,19 @@ repositories {
 
 dependencies {
     implementation(project(":sbe4kt-lib"))
-    implementation("com.google.devtools.ksp:symbol-processing-api:2.3.5")
+    implementation("com.google.devtools.ksp:symbol-processing-api:2.3.6")
 }
 
 kotlin {
     jvmToolchain(25)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+java {
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
 }
 
 publishing {
@@ -26,4 +36,9 @@ publishing {
             from(components["java"])
         }
     }
+}
+
+val compileKotlin: KotlinCompile by tasks
+compileKotlin.compilerOptions {
+    freeCompilerArgs.set(listOf("-Xmulti-dollar-interpolation"))
 }
