@@ -12,23 +12,18 @@ internal fun generateEncodersSection(message: Message): String {
    val className = message.name
    val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
 
-   val defaultParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.defaultValue}," }
-   val randomParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.randomValue}," }
-   val args = fieldsDecOrder.joinToString(", ") { it.name }
+   val defaultArgs = fieldsDecOrder.joinToString(", ") { it.type.defaultValue }
+   val randomArgs = fieldsDecOrder.joinToString(", ") { it.type.randomValue }
 
    val sbeSection = generateSbeSection(message)
 
    return """
-      |fun new$className(
-      |${defaultParams.indent(3)}
-      |): $className {
-      |   return $className($args)
+      |fun new$className(): $className {
+      |   return $className($defaultArgs)
       |}
       |
-      |fun random$className(
-      |${randomParams.indent(3)}
-      |): $className {
-      |   return $className($args)
+      |fun random$className(): $className {
+      |   return $className($randomArgs)
       |}
       |
       |fun encode$className(source: $className, buffer: MutableDirectBuffer, offset: Int = 0) {

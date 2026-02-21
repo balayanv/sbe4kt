@@ -19,7 +19,7 @@ fun main() {
 
    repeat(100) {
       val random = randomMsg()
-      val target = randomMsg()
+      val target = newMsg()
 
       fw.encodeFrom(random)
       fw.decodeInto(target)

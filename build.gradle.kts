@@ -5,7 +5,7 @@ val jvmAddExportsArg = "--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED"
 
 plugins {
    kotlin("jvm") version "2.3.0"
-   id("com.google.devtools.ksp") version "2.3.5"
+   id("com.google.devtools.ksp") version "2.3.6"
    id("sbe4kt")
    id("com.github.ben-manes.versions") version "0.53.0"
    application

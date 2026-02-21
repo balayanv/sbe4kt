@@ -25,10 +25,7 @@ class TagsTest {
    @Test
    fun recordAndRetrieveTags() {
       val baseTime = TimeId.now().tag(42)
-      val tracer = newLatencyTracer(
-         created = baseTime,
-         tags = MicroTag4()
-      )
+      val tracer = LatencyTracer(created = baseTime, tags = MicroTag4())
 
       tracer.recordMileStone1(baseTime.add(10.us))
       tracer.recordMileStone2(baseTime.add(25.us))
@@ -46,10 +43,7 @@ class TagsTest {
       val buffer = UnsafeBuffer(ByteArray(LatencyTracerCodec.SIZE))
       val baseTime = TimeId.now().tag(77)
 
-      val tracer = newLatencyTracer(
-         created = baseTime,
-         tags = MicroTag4()
-      )
+      val tracer = LatencyTracer(created = baseTime, tags = MicroTag4())
 
       tracer.recordMileStone1(baseTime.add(5.us))
       tracer.recordMileStone2(baseTime.add(10.us))
@@ -70,7 +64,7 @@ class TagsTest {
    @Test
    fun printLayout() {
       val baseTime = TimeId.now().tag(99)
-      val tracer = newLatencyTracer(created = baseTime, tags = MicroTag4())
+      val tracer = LatencyTracer(created = baseTime, tags = MicroTag4())
       tracer.recordMileStone1(baseTime.add(10.us))
       tracer.recordMileStone2(baseTime.add(20.us))
       tracer.recordMileStone3(baseTime.add(30.us))

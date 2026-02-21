@@ -22,9 +22,8 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
    val importStatements = imports.joinToString("\n") { "import $it" }
 
    val fieldsDecOrder = struct.fields.sortedBy { it.declarationOrder }
-   val defaultParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.defaultValue}," }
-   val randomParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.randomValue}," }
-   val args = fieldsDecOrder.joinToString(", ") { it.name }
+   val defaultArgs = fieldsDecOrder.joinToString(", ") { it.type.defaultValue }
+   val randomArgs = fieldsDecOrder.joinToString(", ") { it.type.randomValue }
 
    val content = if (!needsFlyweights) {
       """
@@ -32,16 +31,12 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |
       |$importStatements
       |
-      |fun new${struct.name}(
-      |${defaultParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |fun new${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($defaultArgs)
       |}
       |
-      |fun random${struct.name}(
-      |${randomParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |fun random${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($randomArgs)
       |}
       |""".trimTemplate()
    } else {
@@ -57,16 +52,12 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |import org.agrona.MutableDirectBuffer
       |import org.agrona.concurrent.UnsafeBuffer
       |
-      |fun new${struct.name}(
-      |${defaultParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |fun new${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($defaultArgs)
       |}
       |
-      |fun random${struct.name}(
-      |${randomParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |fun random${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($randomArgs)
       |}
       |
       |$codecSection
@@ -88,21 +79,16 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
 
 internal fun KSP.generateComposite(struct: Composite): String {
    val fieldsDecOrder = struct.fields.sortedBy { it.declarationOrder }
-   val defaultParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.defaultValue}," }
-   val randomParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.randomValue}," }
-   val args = fieldsDecOrder.joinToString(", ") { it.name }
+   val defaultArgs = fieldsDecOrder.joinToString(", ") { it.type.defaultValue }
+   val randomArgs = fieldsDecOrder.joinToString(", ") { it.type.randomValue }
 
    return """
-      |fun new${struct.name}(
-      |${defaultParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |fun new${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($defaultArgs)
       |}
       |
-      |fun random${struct.name}(
-      |${randomParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |fun random${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($randomArgs)
       |}
       |""".trimTemplate()
 }
