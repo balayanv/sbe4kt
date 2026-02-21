@@ -1,7 +1,4 @@
-package sbe4kt
-
-import sbe4kt.lib.CharSet
-import sbe4kt.lib.randomStr
+package sbe4kt.lib
 
 /**
  * A high-performance packer using Bit-Shifting with Implicit Null Termination.

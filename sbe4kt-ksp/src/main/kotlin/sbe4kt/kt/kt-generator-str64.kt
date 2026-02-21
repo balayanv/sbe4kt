@@ -15,7 +15,7 @@ internal fun KSP.generateStr64ValueClassFile(charSetDeclaration: KSClassDeclarat
       |
       |package $$packageName
       |
-      |import sbe4kt.CodecStr64
+      |import sbe4kt.lib.CodecStr64
       |import sbe4kt.lib.CharArraySequence
       |import sbe4kt.lib.toBinaryString
       |

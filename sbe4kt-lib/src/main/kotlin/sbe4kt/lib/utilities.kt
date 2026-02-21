@@ -13,46 +13,53 @@ inline fun <reified E : Enum<E>> defaultValue(): E {
    return enumValues<E>()[0]
 }
 
-// CSV Table Utilities
-
-typealias Header = String
-typealias Headers = ArrayList<String>
-
-typealias Value = String
-typealias Row = ArrayList<Value>
-typealias Rows = ArrayList<Row>
-
 class CSV(
-   var info: String = "",
-   val header: Headers = ArrayList(),
-   val rows: Rows = ArrayList(),
+   val rows: MutableList<Row> = ArrayList(),
 ) {
-   fun addHeader(vararg header: Header) = apply {
-      this.header.addAll(header)
+   data class Row(
+      val values: ArrayList<String> = ArrayList(),
+      var metadata: String = ""
+   )
+
+   fun info(info: String) = apply {
+      val row = Row(metadata = "info")
+      row.values.add(info)
+      rows.add(0, row)
    }
 
-   fun addRow(vararg value: Value) = apply {
-      val row = ArrayList<Value>()
-      row.addAll(value)
+   fun addHeader(vararg header: String) = apply {
+      val row = Row(metadata = "header")
+      row.values.addAll(header)
+      val insertIndex = if (rows.firstOrNull()?.metadata == "info") 1 else 0
+      rows.add(insertIndex, row)
+   }
+
+   fun addRow(vararg value: String, metadata: String = "") = apply {
+      val row = Row()
+      row.values.addAll(value)
+      row.metadata = metadata
       rows.add(row)
    }
 
    fun print() {
-      if (header.isEmpty()) return
+      val headerRow = rows.firstOrNull { it.metadata == "header" } ?: return
+      val infoRow = rows.firstOrNull { it.metadata == "info" }
+      val dataRows = rows.filter { it.metadata != "header" && it.metadata != "info" }
 
-      val columnWidths = IntArray(header.size) { index ->
-         var max = header[index].length
-         rows.forEach { row ->
-            if (index < row.size) {
-               max = maxOf(max, row[index].length)
+      val columnWidths = IntArray(headerRow.values.size) { index ->
+         var max = headerRow.values[index].length
+         dataRows.forEach { row ->
+            if (index < row.values.size) {
+               max = maxOf(max, row.values[index].length)
             }
          }
          max + 2 // Add some padding
       }
 
       // Print info string as one big row before header if present
-      if (info.isNotEmpty()) {
-         val totalWidth = columnWidths.sum() + (columnWidths.size - 1) // Total width including separators
+      if (infoRow != null) {
+         val infoText = infoRow.values.firstOrNull() ?: ""
+         val totalWidth = columnWidths.sum() + (columnWidths.size - 1)
 
          // Print info top border
          print("┌")
@@ -62,10 +69,10 @@ class CSV(
 
          // Print info row
          print("│")
-         val infoMaxWidth = totalWidth - 2 // Account for padding
-         val infoPadding = maxOf(0, totalWidth - info.length - 2)
+         val infoMaxWidth = totalWidth - 2
+         val infoPadding = maxOf(0, totalWidth - infoText.length - 2)
          print(" ")
-         print(info.take(infoMaxWidth)) // Truncate if too long
+         print(infoText.take(infoMaxWidth))
          print(" ".repeat(infoPadding))
          print(" ")
          print("│")
@@ -91,26 +98,27 @@ class CSV(
       // Print header
       print("│")
       columnWidths.forEachIndexed { index, width ->
-         val value = header[index]
+         val value = headerRow.values[index]
          val padding = width - value.length
          print(" " + value + " ".repeat(padding - 1))
          print("│")
       }
       println()
 
-      // Print header separator
-      print("├")
-      columnWidths.forEachIndexed { index, width ->
-         print("─".repeat(width))
-         if (index < columnWidths.size - 1) print("┼") else print("┤")
-      }
-      println()
-
-      // Print rows
-      rows.forEach { row ->
+      // Print data rows
+      dataRows.forEach { row ->
+         if (row.metadata.endsWith("separator")) {
+            print("├")
+            columnWidths.forEachIndexed { index, width ->
+               print("─".repeat(width))
+               if (index < columnWidths.size - 1) print("┼") else print("┤")
+            }
+            println()
+            return@forEach
+         }
          print("│")
          columnWidths.forEachIndexed { index, width ->
-            val value = if (index < row.size) row[index] else ""
+            val value = if (index < row.values.size) row.values[index] else ""
             val padding = width - value.length
             print(" " + value + " ".repeat(padding - 1))
             print("│")
@@ -127,12 +135,12 @@ class CSV(
       println()
    }
 
-   fun info(info: String) = apply {
-      this.info = info
+   fun separator(metadata: String = "separator") = apply{
+      addRow(metadata = metadata)
    }
 }
 
-fun CharSet.randomStr(length : Int) = (1..length).map { this.chars.random() }.joinToString("")
+fun CharSet.randomStr(length: Int) = (1..length).map { this.chars.random() }.joinToString("")
 fun Random.nextStr(length: Int) = (1..length).map { nextChar() }.joinToString("")
 fun Random.nextChar() = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[nextInt(62)]
 fun Random.nextShort() = this.nextInt().toShort()
@@ -140,4 +148,7 @@ fun Random.nextShort() = this.nextInt().toShort()
 fun Boolean.convertToByte(): Byte = if (this) 1.toByte() else 0.toByte()
 fun Byte.convertToBoolean(): Boolean = this.toInt() != 0
 
-fun Long.toBinaryString(chunkSize : Int = 8) = this.toULong().toString(2).padStart(64, '0').reversed().chunked(chunkSize).reversed().joinToString(" ")
+fun Long.toBinaryString(chunkSize: Int = 8) = this.toULong().toString(2).padStart(64, '0').reversed().chunked(chunkSize).reversed().joinToString(" ")
+
+fun branchlessMin(a : Int, b : Int) : Int = b + ((a - b) and ((a - b) shr 31))
+fun branchlessMax(a : Int, b : Int) : Int = a - ((a - b) and ((a - b) shr 31))

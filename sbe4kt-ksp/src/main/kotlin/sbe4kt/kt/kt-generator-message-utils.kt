@@ -10,13 +10,27 @@ internal fun generateUtilsSection(message: Message): String {
    val sizeConstName = className.sbeSizeConstant()
    val rows = generateRows(message)
    return $$"""
-      |fun $$className.printSbeLayout() {
-      |   CSV()
+      |fun $$className.sbeLayout() : CSV {
+      |   return CSV()
       |      .info("$$className (totalSize = $$$sizeConstName bytes)")
       |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
+      |      .separator()
+      |      .addRow("0", "[ROOT]", "$$className", "message", "$$$sizeConstName", this.toString(), metadata = "optional.info")
+      |      .separator(metadata = "optional.separator")
       |      .addRow("0", "[HEADER]", "Header", "", "${MessageHeaderEncoder.ENCODED_LENGTH}", "${$${className}Encoder.BLOCK_LENGTH}|${$${className}Encoder.TEMPLATE_ID}|${$${className}Encoder.SCHEMA_ID}|${$${className}Encoder.SCHEMA_VERSION}")
       |$${rows.indent(6)}
-      |      .print()
+      |}
+      |
+      |fun $$className.printSbeLayout(verbose: Boolean = false) {
+      |   val csv = this.sbeLayout()
+      |   if (verbose) {
+      |      csv.print()
+      |   } else {
+      |      val optionalRowsRemoved = csv.rows
+      |         .filterNot { it.metadata.startsWith("optional") }
+      |         .toMutableList()
+      |      CSV(optionalRowsRemoved).print()
+      |   }
       |}
       |""".trimTemplate()
 }
@@ -24,8 +38,12 @@ internal fun generateUtilsSection(message: Message): String {
 private fun generateRows(message: Message): String {
    val result = mutableListOf<String>()
 
-   fun addCsvRow(offset: Int, field: String, type: String, sbeType: String, size: String, value: String) {
-      result.add(""".addRow("$offset", "$field", "$type", "$sbeType", "$size", $value)""")
+   fun addCsvRow(offset: Int, field: String, type: String, sbeType: String, size: String, value: String, metadata: String = "") {
+      if (metadata.isNotEmpty()) {
+         result.add(""".addRow("$offset", "$field", "$type", "$sbeType", "$size", $value, metadata = "$metadata")""")
+      } else {
+         result.add(""".addRow("$offset", "$field", "$type", "$sbeType", "$size", $value)""")
+      }
    }
 
    val sortedFields = message.fields.sortedBy { it.sbeOrder }
@@ -38,12 +56,7 @@ private fun generateRows(message: Message): String {
          val paddingSize = fieldIr.offset - expectedOffset
          if (paddingSize > 0) {
             val offset = expectedOffset + headerSize
-            val field = "[PADDING]"
-            val type = ""
-            val sbeType = ""
-            val size = paddingSize.toString()
-            val value = "\"\""
-            addCsvRow(offset, field, type, sbeType, size, value)
+            addCsvRow(offset, "[PADDING]", "", "", paddingSize.toString(), "\"\"")
          }
       }
 
@@ -63,12 +76,7 @@ private fun generateRows(message: Message): String {
       val finalPadding = message.blockLength - (lastField.offset + lastField.type.size)
       if (finalPadding > 0) {
          val offset = lastField.offset + lastField.type.size + headerSize
-         val field = "[PADDING]"
-         val type = ""
-         val sbeType = ""
-         val size = finalPadding.toString()
-         val value = "\"\""
-         addCsvRow(offset, field, type, sbeType, size, value)
+         addCsvRow(offset, "[PADDING]", "", "", finalPadding.toString(), "\"\"")
       }
    }
 

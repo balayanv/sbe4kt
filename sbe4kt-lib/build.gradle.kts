@@ -12,10 +12,16 @@ repositories {
 
 dependencies {
     api("org.agrona:agrona:2.4.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 kotlin {
     jvmToolchain(25)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 publishing {
