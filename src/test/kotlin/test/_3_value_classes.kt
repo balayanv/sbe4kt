@@ -15,19 +15,19 @@ class ValueClassesTest {
 
    @Test
    fun sizeIs12() {
-      assertEquals(12, SBE_SIZE_MSG4)
+      assertEquals(12, Msg4Codec.SIZE)
       randomMsg4().printSbeLayout()
    }
 
    @Test
    fun valueClassPreserved() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG4))
+      val buffer = UnsafeBuffer(ByteArray(Msg4Codec.SIZE))
 
       val msg = Msg4(f1 = ValueClass1(underlying = 42))
-      wrapAndEncodeMsg4(msg, buffer)
+      encodeMsg4(msg, buffer)
 
       val decoded = newMsg4()
-      wrapAndDecodeMsg4(decoded, buffer)
+      decodeMsg4(decoded, buffer)
 
       assertEquals(ValueClass1(42), decoded.f1)
    }

@@ -61,38 +61,7 @@ internal data class Struct(
             addAll(field.type.imports)
          }
          add(importBase)
-         val pkg = importBase.substringBeforeLast('.')
-         add("${pkg}.${name}RW")
       }
    }
 
-   override fun howToEncodeFromSource(encoder: String, field: String, instance: String): String {
-      val compositeEncoder = "${field}Encoder"
-      val sb = StringBuilder()
-      for (it in fields) {
-         val value = it.type.convertToSbe("$instance.$field.${it.name}")
-         sb.appendLine("$compositeEncoder.${it.name}($value)")
-      }
-      return sb.removeSuffix("\n").toString()
-   }
-
-   override fun howToDecodeIntoTarget(decoder: String, field: String, instance: String): String {
-      val compositeDecoder = "${field}Decoder"
-      val sb = StringBuilder()
-      for (it in fields) {
-         val decodedValue = it.type.convertFromSbe("$compositeDecoder.${it.name}()")
-         sb.appendLine("$instance.$field.${it.name} = $decodedValue")
-      }
-      return sb.removeSuffix("\n").toString()
-   }
-
-   override fun fwSetter(encoder: String, field: String): String {
-      val calls = fields.joinToString(".") { "${it.name}($field.${it.name})" }
-      return "${field}FW.$calls"
-   }
-
-   override fun fwGetter(decoder: String, field: String): String {
-      val fieldDecodes = fields.joinToString(", ") { "${field}FW.${it.name}()" }
-      return "${name}($fieldDecodes)"
-   }
 }

@@ -143,23 +143,6 @@ internal data class Message(
       }
    }
 
-   // When used as a field in another message, handle as nested
-   override fun howToEncodeFromSource(encoder: String, field: String, instance: String): String {
-      return "encode${name}($instance.$field, ${field}Encoder)"
-   }
-
-   override fun howToDecodeIntoTarget(decoder: String, field: String, instance: String): String {
-      return "decode${name}($instance.$field, ${field}Decoder)"
-   }
-
-   override fun fwSetter(encoder: String, field: String): String {
-      return "${field}FW.encodeFrom($field)"
-   }
-
-   override fun fwGetter(decoder: String, field: String): String {
-      return "new${name}().also { ${field}FW.decodeInto(it) }"
-   }
-
    fun sourceFiles(): Array<KSFile> {
       // todo cleanup
       val dependentFiles = mutableSetOf(declaration.containingFile!!)
@@ -200,25 +183,9 @@ internal data class Message(
       imports.add("org.agrona.DirectBuffer")
       imports.add("org.agrona.MutableDirectBuffer")
       imports.add("org.agrona.concurrent.UnsafeBuffer")
-      imports.add("sbe4kt.MessageHeaderEncoder")
-      imports.add("sbe4kt.MessageHeaderDecoder")
       imports.add("sbe4kt.lib.CSV")
-      imports.add("sbe4kt.${name}Encoder")
-      imports.add("sbe4kt.${name}Decoder")
       imports.add(declaration.importName())
       fields.onEach { imports.addAll(it.type.imports) }
-
-      // composite fields need their SBE encoder/decoder imports for the function parameters
-      fields.filter { it.type is Struct }.forEach {
-         imports.add("sbe4kt.${it.type.name}Encoder")
-         imports.add("sbe4kt.${it.type.name}Decoder")
-      }
-
-      // nested message fields need their SBE encoder/decoder imports for the function parameters
-      fields.filter { it.type is Message }.forEach {
-         imports.add("sbe4kt.${it.type.name}Encoder")
-         imports.add("sbe4kt.${it.type.name}Decoder")
-      }
 
       return imports
          .filter { it.substringBeforeLast('.') != packageName && it != packageName }

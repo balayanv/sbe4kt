@@ -2,19 +2,18 @@ package sbe4kt.kt
 
 import sbe4kt.ir.Message
 import sbe4kt.util.indent
-import sbe4kt.util.sbeSizeConstant
 import sbe4kt.util.trimTemplate
 
 internal fun generateUtilsSection(message: Message): String {
    val className = message.name
-   val sizeConstName = className.sbeSizeConstant()
+   val codecName = "${className}Codec"
    val rows = generateRows(message)
    return $$"""
       |fun $$className.printSbeLayout() {
       |   CSV()
-      |      .info("$$className (totalSize = $$$sizeConstName bytes)")
+      |      .info("$$className (totalSize = ${$$codecName.SIZE} bytes)")
       |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
-      |      .addRow("0", "[HEADER]", "Header", "", "${MessageHeaderEncoder.ENCODED_LENGTH}", "${$${className}Encoder.BLOCK_LENGTH}|${$${className}Encoder.TEMPLATE_ID}|${$${className}Encoder.SCHEMA_ID}|${$${className}Encoder.SCHEMA_VERSION}")
+      |      .addRow("0", "[HEADER]", "Header", "", "${$$codecName.HEADER_SIZE}", "${$$codecName.BLOCK_LENGTH}|${$$codecName.TEMPLATE_ID}|${$$codecName.SCHEMA_ID}|${$$codecName.SCHEMA_VERSION}")
       |$${rows.indent(6)}
       |      .print()
       |}

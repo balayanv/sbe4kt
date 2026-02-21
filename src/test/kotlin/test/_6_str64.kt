@@ -27,26 +27,26 @@ class Str64Test {
 
    @Test
    fun shortSymbolRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE3))
+      val buffer = UnsafeBuffer(ByteArray(Trade3Codec.SIZE))
 
       val trade = Trade3(id = 1L, symbol = TestSymbol1Str64.from("ABC"), timestamp = 2L, price = 3L, amount = 4L)
-      wrapAndEncodeTrade3(trade, buffer)
+      encodeTrade3(trade, buffer)
 
       val decoded = newTrade3()
-      wrapAndDecodeTrade3(decoded, buffer)
+      decodeTrade3(decoded, buffer)
 
       assertEquals("ABC", decoded.symbol.toString())
    }
 
    @Test
    fun fullCapSymbolRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE3))
+      val buffer = UnsafeBuffer(ByteArray(Trade3Codec.SIZE))
 
       val trade = Trade3(id = 1L, symbol = TestSymbol1Str64.from("XBTUSDTH26"), timestamp = 2L, price = 3L, amount = 4L)
-      wrapAndEncodeTrade3(trade, buffer)
+      encodeTrade3(trade, buffer)
 
       val decoded = newTrade3()
-      wrapAndDecodeTrade3(decoded, buffer)
+      decodeTrade3(decoded, buffer)
 
       assertEquals("XBTUSDTH26", decoded.symbol.toString())
    }

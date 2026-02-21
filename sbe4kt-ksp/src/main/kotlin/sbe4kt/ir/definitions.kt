@@ -32,19 +32,8 @@ internal sealed interface IR {
       val packageStr: String
       val imports: Set<String>
 
-      fun encodeField(encoder: String, field: String, value: String) = "$encoder.$field($value)"
-      fun decodeField(decoder: String, field: String) = "$decoder.$field()"
-
       fun convertToSbe(value: String) = value
       fun convertFromSbe(value: String) = value
-
-      fun howToEncodeFromSource(encoder: String, field: String, instance: String) = encodeField(encoder, field, convertToSbe("$instance.$field"))
-      fun howToDecodeIntoTarget(decoder: String, field: String, instance: String) = assignToInstanceField(instance, field, convertFromSbe(decodeField(decoder, field)))
-
-      fun assignToInstanceField(instance: String, field: String, value: String) = "$instance.$field = $value"
-
-      fun fwSetter(encoder: String, field: String) = encodeField(encoder, field, convertToSbe(field))
-      fun fwGetter(decoder: String, field: String): String = convertFromSbe(decodeField(decoder, field))
    }
 }
 

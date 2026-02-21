@@ -27,8 +27,6 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
    val args = fieldsDecOrder.joinToString(", ") { it.name }
 
    val content = if (!needsFlyweights) {
-      // Structs without flyweights only get helper functions
-      // (e.g., composites used only in unions don't have encoder/decoder classes)
       """
       |package $packageName
       |
@@ -47,14 +45,17 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |}
       |""".trimTemplate()
    } else {
-      val structBody = generateStructBody(struct)
+      val codecSection = generateCompositeCodecSection(struct)
+      val rwSection = generateCompositeRWSection(struct)
+      val printLayoutSection = generateStructPrintLayout(struct)
 
       """
       |package $packageName
       |
       |$importStatements
-      |import sbe4kt.${struct.name}Encoder
-      |import sbe4kt.${struct.name}Decoder
+      |import org.agrona.DirectBuffer
+      |import org.agrona.MutableDirectBuffer
+      |import org.agrona.concurrent.UnsafeBuffer
       |
       |fun new${struct.name}(
       |${defaultParams.indent(3)}
@@ -68,7 +69,11 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |   return ${struct.name}($args)
       |}
       |
-      |$structBody
+      |$codecSection
+      |
+      |$rwSection
+      |
+      |$printLayoutSection
       |""".trimTemplate()
    }
 
@@ -87,8 +92,6 @@ internal fun KSP.generateComposite(struct: Composite): String {
    val randomParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.randomValue}," }
    val args = fieldsDecOrder.joinToString(", ") { it.name }
 
-   val structBody = generateStructBody(struct)
-
    return """
       |fun new${struct.name}(
       |${defaultParams.indent(3)}
@@ -101,38 +104,15 @@ internal fun KSP.generateComposite(struct: Composite): String {
       |): ${struct.name} {
       |   return ${struct.name}($args)
       |}
-      |
-      |$structBody
       |""".trimTemplate()
 }
 
-private fun generateStructBody(struct: Struct): String {
-   val encoderName = struct.name.replaceFirstChar { it.lowercase() } + "Encoder"
-   val decoderName = struct.name.replaceFirstChar { it.lowercase() } + "Decoder"
-
+private fun generateStructPrintLayout(struct: Struct): String {
    val fieldsSbeOrder = struct.fields.sortedBy { it.sbeOrder }
-
-   val readMethods = struct.fields.joinToString("\n") { "fun ${it.name}() = ${it.type.convertFromSbe("decoder.${it.name}()")}" }
-   val writeMethods = struct.fields.joinToString("\n") { "fun ${it.name}(${it.name}: ${it.type.name}) = apply { encoder.${it.name}(${it.type.convertToSbe(it.name)}) }" }
-
-   val encoderBody = fieldsSbeOrder.joinToString("\n") {
-      val value = it.type.convertToSbe("source.${it.name}")
-      "$encoderName.${it.name}($value)"
-   }
-   val decoderBody = fieldsSbeOrder.joinToString("\n") {
-      val decoded = it.type.convertFromSbe("$decoderName.${it.name}()")
-      "target.${it.name} = $decoded"
-   }
-
-   // Calculate actual encoded length (last field offset + size)
-   val encodedLength = if (fieldsSbeOrder.isEmpty()) 0 else {
-      val lastField = fieldsSbeOrder.last()
-      lastField.offset + lastField.type.size
-   }
+   val encodedLength = struct.encodedLength
 
    val printLayoutRows = buildString {
       for ((index, field) in fieldsSbeOrder.withIndex()) {
-         // Show padding before field if there is a gap
          if (struct.usePadding && index > 0) {
             val prevField = fieldsSbeOrder[index - 1]
             val expectedOffset = prevField.offset + prevField.type.size
@@ -142,7 +122,6 @@ private fun generateStructBody(struct: Struct): String {
             }
          }
 
-         // Show the field itself
          val typeName = field.type.name
          val sbeName = field.type.sbeName
          val size = field.type.size
@@ -152,36 +131,6 @@ private fun generateStructBody(struct: Struct): String {
    }.trimEnd()
 
    return """
-      |fun encode${struct.name}(
-      |   source: ${struct.name},
-      |   $encoderName: ${struct.name}Encoder,
-      |){
-      |${encoderBody.indent(3)}
-      |}
-      |
-      |fun decode${struct.name}(
-      |   target: ${struct.name},
-      |   $decoderName: ${struct.name}Decoder,
-      |){
-      |${decoderBody.indent(3)}
-      |}
-      |
-      |class ${struct.name}RW(
-      |   var encoder: ${struct.name}Encoder = ${struct.name}Encoder(),
-      |   var decoder: ${struct.name}Decoder = ${struct.name}Decoder(),
-      |) {
-      |${readMethods.indent(3)}
-      |${writeMethods.indent(3)}
-      |
-      |   fun encodeFrom(source: ${struct.name}) = apply {
-      |      encode${struct.name}(source, encoder)
-      |   }
-      |
-      |   fun decodeInto(target: ${struct.name}) = apply {
-      |      decode${struct.name}(target, decoder)
-      |   }
-      |}
-      |
       |fun ${struct.name}.printSbeLayout() {
       |   CSV()
       |      .info("${struct.name} (totalSize = $encodedLength bytes)")

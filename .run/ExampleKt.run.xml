@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="UnionsKt" type="JetRunConfigurationType" nameIsGenerated="true">
-    <option name="MAIN_CLASS_NAME" value="example.UnionsKt" />
+  <configuration default="false" name="ExampleKt" type="JetRunConfigurationType" nameIsGenerated="true">
+    <option name="MAIN_CLASS_NAME" value="example.ExampleKt" />
     <module name="sbe4kt.main" />
     <shortenClasspath name="NONE" />
     <option name="VM_PARAMETERS" value="--sun-misc-unsafe-memory-access=allow --add-opens=java.base/jdk.internal.misc=ALL-UNNAMED" />

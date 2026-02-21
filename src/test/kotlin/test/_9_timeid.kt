@@ -14,14 +14,14 @@ class TimeIdTest {
 
    @Test
    fun timeIdWithTagRoundtrips() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG8))
+      val buffer = UnsafeBuffer(ByteArray(Msg8Codec.SIZE))
       val timeWithTag = TimeId().ms(System.currentTimeMillis()).tag(77)
 
       val msg = Msg8(time = timeWithTag)
-      wrapAndEncodeMsg8(msg, buffer)
+      encodeMsg8(msg, buffer)
 
       val decoded = newMsg8()
-      wrapAndDecodeMsg8(decoded, buffer)
+      decodeMsg8(decoded, buffer)
 
       assertEquals(77L, decoded.time.tag())
       assertEquals(timeWithTag.ms().millis, decoded.time.ms().millis)

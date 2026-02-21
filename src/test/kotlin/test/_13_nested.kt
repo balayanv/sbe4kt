@@ -26,21 +26,21 @@ class NestedMessageTest {
 
    @Test
    fun signal2SizeIs33() {
-      assertEquals(33, SBE_SIZE_SIGNAL2)
+      assertEquals(33, Signal2Codec.SIZE)
    }
 
    @Test
    fun nestedMessageRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_SIGNAL2))
+      val buffer = UnsafeBuffer(ByteArray(Signal2Codec.SIZE))
 
       val signal = Signal2(
          direction = Direction2.SELL,
          xy = XY2(time = TimeId(Nanos(1000000000L)), price = FPD.fromExact("100.5")),
       )
-      wrapAndEncodeSignal2(signal, buffer)
+      encodeSignal2(signal, buffer)
 
       val decoded = newSignal2()
-      wrapAndDecodeSignal2(decoded, buffer)
+      decodeSignal2(decoded, buffer)
 
       assertEquals(Direction2.SELL, decoded.direction)
       assertEquals(TimeId(Nanos(1000000000L)), decoded.xy.time)
@@ -49,7 +49,7 @@ class NestedMessageTest {
 
    @Test
    fun flyweightNestedMessageAccess() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_SIGNAL2))
+      val buffer = UnsafeBuffer(ByteArray(Signal2Codec.SIZE))
       val fw = Signal2RW(buffer, 0)
 
       fw.direction(Direction2.BUY)

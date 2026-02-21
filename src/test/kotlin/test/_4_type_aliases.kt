@@ -22,19 +22,19 @@ class TypeAliasNestingTest {
 
    @Test
    fun sizeIs9() {
-      assertEquals(9, SBE_SIZE_MSG5)
+      assertEquals(9, Msg5Codec.SIZE)
       randomMsg5().printSbeLayout()
    }
 
    @Test
    fun deeplyNestedValueClassRoundtrips() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG5))
+      val buffer = UnsafeBuffer(ByteArray(Msg5Codec.SIZE))
 
       val msg = Msg5(f1 = ValueClass3(ValueClass2(Enum2.VALUE2)))
-      wrapAndEncodeMsg5(msg, buffer)
+      encodeMsg5(msg, buffer)
 
       val decoded = newMsg5()
-      wrapAndDecodeMsg5(decoded, buffer)
+      decodeMsg5(decoded, buffer)
 
       assertEquals(ValueClass3(ValueClass2(Enum2.VALUE2)), decoded.f1)
    }

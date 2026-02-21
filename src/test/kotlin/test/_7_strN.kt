@@ -20,31 +20,31 @@ class StrNTest {
 
    @Test
    fun sizeIs60() {
-      assertEquals(60, SBE_SIZE_TRADE4)
+      assertEquals(60, Trade4Codec.SIZE)
    }
 
    @Test
    fun shortStringRoundtrips() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE4))
+      val buffer = UnsafeBuffer(ByteArray(Trade4Codec.SIZE))
 
       val trade = Trade4(id = 1L, symbol = "HI", timestamp = 2L, price = 3L, amount = 4L)
-      wrapAndEncodeTrade4(trade, buffer)
+      encodeTrade4(trade, buffer)
 
       val decoded = newTrade4()
-      wrapAndDecodeTrade4(decoded, buffer)
+      decodeTrade4(decoded, buffer)
 
       assertEquals("HI", decoded.symbol)
    }
 
    @Test
    fun fullLengthStringRoundtrips() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE4))
+      val buffer = UnsafeBuffer(ByteArray(Trade4Codec.SIZE))
 
       val trade = Trade4(id = 1L, symbol = "12345678901234567890", timestamp = 2L, price = 3L, amount = 4L)
-      wrapAndEncodeTrade4(trade, buffer)
+      encodeTrade4(trade, buffer)
 
       val decoded = newTrade4()
-      wrapAndDecodeTrade4(decoded, buffer)
+      decodeTrade4(decoded, buffer)
 
       assertEquals("12345678901234567890", decoded.symbol)
    }

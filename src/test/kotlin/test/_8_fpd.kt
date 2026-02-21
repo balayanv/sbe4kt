@@ -17,28 +17,28 @@ class FPDTest {
 
    @Test
    fun fpd5ArithmeticSurvivesRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG6))
+      val buffer = UnsafeBuffer(ByteArray(Msg6Codec.SIZE))
       val sum = FPD5.fromExact("1111.11111") + FPD5.fromExact("22.22222")
 
       val msg = Msg6(f1 = sum)
-      wrapAndEncodeMsg6(msg, buffer)
+      encodeMsg6(msg, buffer)
 
       val decoded = newMsg6()
-      wrapAndDecodeMsg6(decoded, buffer)
+      decodeMsg6(decoded, buffer)
 
       assertEquals("1133.33333", decoded.f1.toString())
    }
 
    @Test
    fun fpdCrossScaleArithmeticSurvivesRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG7))
+      val buffer = UnsafeBuffer(ByteArray(Msg7Codec.SIZE))
       val sum = FPD.fromExact("1111.11111") + FPD.fromExact("22.222")
 
       val msg = Msg7(f1 = sum)
-      wrapAndEncodeMsg7(msg, buffer)
+      encodeMsg7(msg, buffer)
 
       val decoded = newMsg7()
-      wrapAndDecodeMsg7(decoded, buffer)
+      decodeMsg7(decoded, buffer)
 
       assertEquals("1133.33311", decoded.f1.toString())
    }

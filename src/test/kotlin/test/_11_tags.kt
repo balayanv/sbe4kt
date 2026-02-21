@@ -43,7 +43,7 @@ class TagsTest {
 
    @Test
    fun tagsRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_LATENCY_TRACER))
+      val buffer = UnsafeBuffer(ByteArray(LatencyTracerCodec.SIZE))
       val baseTime = TimeId.now().tag(77)
 
       val tracer = newLatencyTracer(
@@ -56,10 +56,10 @@ class TagsTest {
       tracer.recordMileStone3(baseTime.add(15.us))
       tracer.recordMileStone4(baseTime.add(20.us))
 
-      wrapAndEncodeLatencyTracer(tracer, buffer)
+      encodeLatencyTracer(tracer, buffer)
 
       val decoded = newLatencyTracer()
-      wrapAndDecodeLatencyTracer(decoded, buffer)
+      decodeLatencyTracer(decoded, buffer)
 
       assertEquals(baseTime.add(5.us).ns().nanos, decoded.getTimeMileStone1().ns().nanos)
       assertEquals(baseTime.add(10.us).ns().nanos, decoded.getTimeMileStone2().ns().nanos)

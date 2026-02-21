@@ -16,16 +16,4 @@ internal data class StringN(val length: Int, val encoding: Encoding = Encoding.A
    override val imports: Set<String> = setOf(
       "sbe4kt.lib.nextStr"
    )
-
-   override fun encodeField(encoder: String, field: String, value: String) = "$encoder.put$field($value)"
-
-   override fun decodeField(decoder: String, field: String) = "$decoder.get$field()"
-
-   override fun howToEncodeFromSource(encoder: String, field: String, instance: String) = "$encoder.${field}($instance.$field)"
-
-   override fun howToDecodeIntoTarget(decoder: String, field: String, instance: String) = "$instance.$field = $decoder.${field}()"
-
-   override fun fwSetter(encoder: String, field: String) = "$encoder.${field}($field)"
-
-   override fun fwGetter(decoder: String, field: String) = "$decoder.${field}()"
 }

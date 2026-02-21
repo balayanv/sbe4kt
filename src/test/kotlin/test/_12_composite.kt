@@ -26,7 +26,7 @@ class CompositeTest {
 
    @Test
    fun sizeIs25() {
-      assertEquals(25, SBE_SIZE_SIGNAL1)
+      assertEquals(25, Signal1Codec.SIZE)
    }
 
    @Test
@@ -46,16 +46,16 @@ class CompositeTest {
 
    @Test
    fun compositeEncodeDecodeRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_SIGNAL1))
+      val buffer = UnsafeBuffer(ByteArray(Signal1Codec.SIZE))
 
       val signal = Signal1(
          f1 = Direction1.BUY,
          f2 = XY1(time = TimeId(Nanos(1234000000L)), price = FPD.fromExact("78000.0")),
       )
-      wrapAndEncodeSignal1(signal, buffer)
+      encodeSignal1(signal, buffer)
 
       val decoded = newSignal1()
-      wrapAndDecodeSignal1(decoded, buffer)
+      decodeSignal1(decoded, buffer)
 
       assertEquals(Direction1.BUY, decoded.f1)
       assertEquals(TimeId(Nanos(1234000000L)), decoded.f2.time)

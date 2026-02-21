@@ -14,13 +14,13 @@ class AlignmentTest {
 
    @Test
    fun withoutPaddingSizeIs21() {
-      assertEquals(21, SBE_SIZE_MSG1)
+      assertEquals(21, Msg1Codec.SIZE)
       randomMsg1().printSbeLayout()
    }
 
    @Test
    fun withPaddingSizeIs32() {
-      assertEquals(32, SBE_SIZE_MSG2)
+      assertEquals(32, Msg2Codec.SIZE)
       randomMsg2().printSbeLayout()
    }
 }
