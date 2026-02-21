@@ -42,6 +42,28 @@ internal fun generateTestsSection(message: Message): String {
       |         assertEquals(original, decoded)
       |      }
       |   }
+      |
+      |   @Test
+      |   fun testCodecCorrectness() {
+      |      val buffer1 = UnsafeBuffer(ByteArray($codecName.SIZE))
+      |      val buffer2 = UnsafeBuffer(ByteArray($codecName.SIZE))
+      |
+      |      repeat(100) {
+      |         val original = random$className()
+      |         val decodedFrom1 = new$className()
+      |         val decodedFrom2 = new$className()
+      |
+      |         encode$className(original, buffer1)
+      |         decode${className}SBE(decodedFrom1, buffer1)
+      |
+      |         encode${className}SBE(original, buffer2)
+      |         decode$className(decodedFrom2, buffer2)
+      |
+      |         assertEquals(buffer1, buffer2)
+      |         assertEquals(original, decodedFrom1)
+      |         assertEquals(original, decodedFrom2)
+      |      }
+      |   }
       |}
       |""".trimTemplate()
 }
