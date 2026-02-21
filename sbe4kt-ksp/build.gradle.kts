@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "sbe4kt"
-version = "0.1.0"
+version = rootProject.version
 
 repositories {
     mavenCentral()

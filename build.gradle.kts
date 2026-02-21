@@ -1,3 +1,5 @@
+version = "0.1.0"
+
 val jvmUnsafeAccessArg = "--sun-misc-unsafe-memory-access=allow"
 val jvmAddExportsArg = "--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED"
 
@@ -46,4 +48,10 @@ sourceSets {
    test {
       kotlin { srcDirs("src/test/kotlin", layout.buildDirectory.dir("generated/ksp/test/kotlin")) }
    }
+}
+
+tasks.register("publishAllToMavenLocal") {
+   description = "Publishes sbe4kt-lib, sbe4kt-ksp, and sbe4kt-gradle to local Maven repository"
+   dependsOn(":sbe4kt-lib:publishToMavenLocal", ":sbe4kt-ksp:publishToMavenLocal")
+   dependsOn(gradle.includedBuild("sbe4kt-gradle").task(":publishToMavenLocal"))
 }
