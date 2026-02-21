@@ -1,11 +1,11 @@
 plugins {
-    kotlin("jvm") version "2.3.0"
+    kotlin("jvm") version "2.3.10"
     `java-gradle-plugin`
     `maven-publish`
 }
 
 group = "sbe4kt"
-version = "0.1.0"
+version = "0.1.2-SNAPSHOT"
 
 repositories {
     mavenCentral()

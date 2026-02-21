@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "sbe4kt"
-version = rootProject.version
+version = "0.1.2-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -14,7 +14,7 @@ repositories {
 
 dependencies {
     implementation(project(":sbe4kt-lib"))
-    implementation("com.google.devtools.ksp:symbol-processing-api:2.3.5")
+    implementation("com.google.devtools.ksp:symbol-processing-api:2.3.6")
 }
 
 kotlin {

@@ -1,10 +1,10 @@
-version = "0.1.0"
+import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
 
 val jvmUnsafeAccessArg = "--sun-misc-unsafe-memory-access=allow"
 val jvmAddExportsArg = "--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED"
 
 plugins {
-   kotlin("jvm") version "2.3.0"
+   kotlin("jvm") version "2.3.10"
    id("com.google.devtools.ksp") version "2.3.6"
    id("sbe4kt")
    id("com.github.ben-manes.versions") version "0.53.0"
@@ -32,7 +32,7 @@ dependencies {
 
    implementation("uk.co.real-logic:sbe-all:1.37.1")
 
-   testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
+   testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")
    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -50,8 +50,9 @@ sourceSets {
    }
 }
 
-tasks.register("publishAllToMavenLocal") {
-   description = "Publishes sbe4kt-lib, sbe4kt-ksp, and sbe4kt-gradle to local Maven repository"
-   dependsOn(":sbe4kt-lib:publishToMavenLocal", ":sbe4kt-ksp:publishToMavenLocal")
-   dependsOn(gradle.includedBuild("sbe4kt-gradle").task(":publishToMavenLocal"))
+tasks.withType<DependencyUpdatesTask> {
+   rejectVersionIf {
+      val v = candidate.version.uppercase()
+      listOf("-ALPHA", "-BETA", "-RC", "-M", ".M", "-DEV", "-SNAPSHOT").any { v.contains(it) }
+   }
 }

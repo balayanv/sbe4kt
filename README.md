@@ -1545,6 +1545,7 @@ fun main() {
 34. [ ] add configuration option `requireNotNulls` (cannot use `allowNullableTypes`)
 35. [ ] add configuration option `requireFixedLength` (cannot use `allowVarLengthFields`)
 36. [ ] add flags to control strictness of schema evolution
+37. [ ] update readme tutorial
 
 ## Issues/Questions/Notes
 
