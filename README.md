@@ -8,18 +8,18 @@ Also i do not like xml.
 
 # SBE4KT
 
-SBE4KT is a Kotlin Symbol Processor (a compiler plugin) with a simple goal : 
-to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs. 
+SBE4KT is a Kotlin Symbol Processor (a compiler plugin) with a simple goal :
+to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs (and augment it when it makes sense).
 
-It adds support for lots of features not available in SBE via code generation, 
-using SBE Encoder/Decoders as the building blocks to support the features we all need on serialziation layer.
+It adds support for lots of features not available in SBE via code generation,
+using SBE Encoder/Decoders as the building blocks to support the features we all need on serialziation layer. Usually developers write these themselves.
 
-It uses your classes as reference/schema, builds intermediate representation of what your schema looks like, 
-then it generates `sbe-schema.xml` and compiles it via `sbetool`, 
+SBE4KT uses your classes as reference/schema, builds intermediate representation of what your schema looks like,
+then it generates `sbe-schema.xml` and compiles it via `sbetool`,
 and generates number of high level kotlin extensions to use the codecs.
 
-A good serialization library should leave developers with no need to write custom code to do serialization. 
-This library is intentionally kept simple such that its easy to customise to generate what you need/want. Even if its not already supported, its easy to change the code. 
+I believe that a good serialization library should leave developers with no need to write custom code to do serialization.
+This library is intentionally kept simple such that its easy to customise to generate what you need/want. Even if its not already supported, its easy to change the code.
 
 It also has flags to disable entire features so that developers do not take shortcuts with costly tradeoffs.
 
