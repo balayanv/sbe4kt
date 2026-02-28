@@ -149,7 +149,7 @@ class UnionTypesTest {
          payload = Failure1(timestamp = TimeId(Nanos(12000000000L)), errorCode = 403)
       ).encodeTo(buffer)
 
-      val fwR = Wrapper1R(buffer, 0)
+      val fwR = Wrapper1RW(buffer, 0)
       assertEquals(TimeId(Nanos(11000000000L)), fwR.id())
 
       val payload = fwR.payload()
@@ -160,7 +160,7 @@ class UnionTypesTest {
    @Test
    fun writeOnlyFlyweight() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER1))
-      val fwW = Wrapper1W(buffer, 0)
+      val fwW = Wrapper1RW(buffer, 0)
 
       fwW.id(TimeId(Nanos(13000000000L)))
       fwW.payload(Success1(timestamp = TimeId(Nanos(14000000000L)), value = 888L))

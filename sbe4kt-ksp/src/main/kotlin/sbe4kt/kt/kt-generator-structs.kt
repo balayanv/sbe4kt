@@ -85,18 +85,6 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |${readMethods.indent(3)}
       |${writeMethods.indent(3)}
       |}
-      |
-      |class ${struct.name}R(
-      |   private var decoder: ${struct.name}Decoder,
-      |) {
-      |${readMethods.indent(3)}
-      |}
-      |
-      |class ${struct.name}W(
-      |   private var encoder: ${struct.name}Encoder,
-      |) {
-      |${writeMethods.indent(3)}
-      |}
       |""".trimTemplate()
    }
 
@@ -167,18 +155,6 @@ internal fun KSP.generateComposite(struct: Composite): String {
       |   private var decoder: ${struct.name}Decoder,
       |) {
       |${readMethods.indent(3)}
-      |${writeMethods.indent(3)}
-      |}
-      |
-      |class ${struct.name}R(
-      |   private var decoder: ${struct.name}Decoder,
-      |) {
-      |${readMethods.indent(3)}
-      |}
-      |
-      |class ${struct.name}W(
-      |   private var encoder: ${struct.name}Encoder,
-      |) {
       |${writeMethods.indent(3)}
       |}
       |
