@@ -53,7 +53,7 @@ class Str64Test {
 
    @Test
    fun flyweightStr64() {
-      val fw = Trade3RW()
+      val fw = Trade3RW(UnsafeBuffer(ByteArray(SBE_SIZE_TRADE3)), 0)
       fw.symbol(TestSymbol1Str64.from("ETH_USD"))
       assertEquals("ETH_USD", fw.symbol().toString())
    }

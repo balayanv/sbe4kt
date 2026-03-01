@@ -51,13 +51,17 @@ class NestedMessageTest {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_SIGNAL2))
       val fw = Signal2RW(buffer, 0)
 
-      fw.direction(Direction2.BUY)
-      fw.xyFW()
-         .time(TimeId(Nanos(7777000000L)))
-         .price(FPD.fromExact("55.55"))
+      val source = Signal2(
+         direction = Direction2.BUY,
+         xy = XY2(time = TimeId(Nanos(7777000000L)), price = FPD.fromExact("55.55"))
+      )
+      fw.encodeFrom(source)
 
-      assertEquals(Direction2.BUY, fw.direction())
-      assertEquals(TimeId(Nanos(7777000000L)), fw.xyFW().time())
-      assertEquals(FPD.fromExact("55.55"), fw.xyFW().price())
+      val target = newSignal2()
+      fw.decodeInto(target)
+
+      assertEquals(Direction2.BUY, target.direction)
+      assertEquals(TimeId(Nanos(7777000000L)), target.xy.time)
+      assertEquals(FPD.fromExact("55.55"), target.xy.price)
    }
 }

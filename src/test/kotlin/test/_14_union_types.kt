@@ -249,7 +249,7 @@ class UnionTypesTest {
 
    @Test
    fun sealedInterfaceFlyweight() {
-      val fw = Wrapper2RW()
+      val fw = Wrapper2RW(UnsafeBuffer(ByteArray(SBE_SIZE_WRAPPER2)), 0)
 
       fw.id(TimeId(Nanos(5000000000L)))
       fw.payload(Service1Message.Success2(timestamp = TimeId(Nanos(6000000000L)), value = 999L))

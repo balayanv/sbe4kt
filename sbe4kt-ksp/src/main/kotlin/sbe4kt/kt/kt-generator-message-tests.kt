@@ -31,7 +31,8 @@ internal fun generateTestsSection(message: Message): String {
       |
       |   @Test
       |   fun testFlyweights() {
-      |      val wrapper = ${className}RW()
+      |      val buffer = UnsafeBuffer(ByteArray($sizeConstName))
+      |      val wrapper = ${className}RW(buffer, 0)
       |      repeat(100) {
       |         val original = random$className()
       |         wrapper.encodeFrom(original)

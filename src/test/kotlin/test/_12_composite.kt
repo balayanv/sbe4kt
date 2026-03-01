@@ -35,13 +35,13 @@ class CompositeTest {
       val fw = Signal1RW(buffer, 100)
 
       fw.f1(Direction1.SELL)
-      fw.f2FW()
+      fw.f2()
          .time(TimeId(Nanos(9999000000L)))
          .price(FPD.fromExact("12345.67"))
 
       assertEquals(Direction1.SELL, fw.f1())
-      assertEquals(TimeId(Nanos(9999000000L)), fw.f2FW().time())
-      assertEquals(FPD.fromExact("12345.67"), fw.f2FW().price())
+      assertEquals(TimeId(Nanos(9999000000L)), fw.f2().time())
+      assertEquals(FPD.fromExact("12345.67"), fw.f2().price())
    }
 
    @Test

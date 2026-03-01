@@ -18,7 +18,8 @@ class FlyweightsTest {
 
    @Test
    fun rwDirectSetAndGet() {
-      val fw = Trade2RW()
+      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE2))
+      val fw = Trade2RW(buffer, 0)
       fw.id(1111L).symbol(42).timestamp(2222L).price(3333L).amount(4444L)
 
       assertEquals(1111L, fw.id())
