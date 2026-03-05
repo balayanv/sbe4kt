@@ -9,21 +9,23 @@ Also i do not like xml.
 # SBE4KT
 
 SBE4KT is a Kotlin Symbol Processor (a compiler plugin) with a simple goal : 
-to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs. 
+to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs. Its a port of a different project called CAPNP4KT which does the same but for [CapNProto](https://capnproto.org/) instead of SBE.
 
 It adds support for lots of features not available in SBE via code generation, 
-using SBE Encoder/Decoders as the building blocks to support the features we all need on serialziation layer.
+using SBE Encoder/Decoders as the building blocks to support the features we all need on serialziation layer. Usually developers write these themselves.
 
-It uses your classes as reference/schema, builds intermediate representation of what your schema looks like, 
+SBE4KT uses your classes as reference/schema, builds intermediate representation of what your schema looks like, 
 then it generates `sbe-schema.xml` and compiles it via `sbetool`, 
 and generates number of high level kotlin extensions to use the codecs.
 
-A good serialization library should leave developers with no need to write custom code to do serialization. 
-This library is intentionally kept simple such that its easy to customise to generate what you need/want. Even if its not already supported, its easy to change the code. 
+I believe that a good serialization library should leave developers with no need to write custom code to do serialization. 
+This library is intentionally kept simple such that its easy to customise to generate what you need/want. Even if its not already supported, its easy to change the code.
 
 It also has flags to disable entire features so that developers do not take shortcuts with costly tradeoffs.
 
 ## Quick Start
+
+TODO : there is a significant update not reflected in readme yet, where SBE4KT also generates the codecs (Encoder/Decoder) but follows the same wire format as SBE (e.g. anything serialized with those is 100% SBE compatible and vice versa). This is done to get extra speed over SBE.
 
 To use it you need to annotate a data class with `@SBE` annotation.
 You can try with a simple class `example.kt`
