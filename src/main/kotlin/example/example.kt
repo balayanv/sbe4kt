@@ -7,17 +7,19 @@ import sbe4kt.SBE
 @SBE
 data class Trade(
    var id: Long,
-   var price: Long,
-   var amount: Long,
-   var flags: Long,
+   var payload: Payload,
+
+   @META(size = 12)
+   var str : String,
 )
 
-//@SBE
-//data class Quote(
-//   var bid: Long,
-//   var ask: Long,
-//)
+@SBE(isStruct = true)
+data class Payload(
+   var f1 : Int,
+   var f2 : Int,
+)
 
 fun main() {
-   randomTrade().printSbeLayout()
+   val randomTrade = randomTrade()
+   randomTrade.printSbeLayout()
 }

@@ -12,25 +12,14 @@ internal fun generateUtilsSection(message: Message): String {
    return $$"""
       |fun $$className.sbeLayout() : CSV {
       |   return CSV()
-      |      .info("$$className (totalSize = $$$sizeConstName bytes)")
       |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
-      |      .separator()
-      |      .addRow("0", "[ROOT]", "$$className", "message", "$$$sizeConstName", this.toString(), metadata = "optional.info")
-      |      .separator(metadata = "optional.separator")
       |      .addRow("0", "[HEADER]", "Header", "", "${MessageHeaderEncoder.ENCODED_LENGTH}", "${$${className}Encoder.BLOCK_LENGTH}|${$${className}Encoder.TEMPLATE_ID}|${$${className}Encoder.SCHEMA_ID}|${$${className}Encoder.SCHEMA_VERSION}")
       |$${rows.indent(6)}
+      |      .addRow("$$$sizeConstName", "[END]", "", "", "", "")
       |}
       |
-      |fun $$className.printSbeLayout(verbose: Boolean = false) {
-      |   val csv = this.sbeLayout()
-      |   if (verbose) {
-      |      csv.print()
-      |   } else {
-      |      val optionalRowsRemoved = csv.rows
-      |         .filterNot { it.metadata.startsWith("optional") }
-      |         .toMutableList()
-      |      CSV(optionalRowsRemoved).print()
-      |   }
+      |fun $$className.printSbeLayout() {
+      |   sbeLayout().print()
       |}
       |""".trimTemplate()
 }

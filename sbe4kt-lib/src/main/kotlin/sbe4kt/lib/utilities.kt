@@ -105,6 +105,14 @@ class CSV(
       }
       println()
 
+      // Print header separator
+      print("├")
+      columnWidths.forEachIndexed { index, width ->
+         print("─".repeat(width))
+         if (index < columnWidths.size - 1) print("┼") else print("┤")
+      }
+      println()
+
       // Print data rows
       dataRows.forEach { row ->
          if (row.metadata.endsWith("separator")) {
