@@ -60,6 +60,30 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       val encodeBody = struct.fields.joinToString("\n") { "encoder.${it.name}(${it.type.convertToSbe("source.${it.name}")})" }
       val decodeBody = struct.fields.joinToString("\n") { "target.${it.name} = ${it.type.convertFromSbe("decoder.${it.name}()")}" }
 
+      val sortedFields = struct.fields.sortedBy { it.sbeOrder }
+      val encodedLength = if (sortedFields.isEmpty()) 0 else {
+         val lastField = sortedFields.last()
+         lastField.offset + lastField.type.size
+      }
+
+      val layoutRows = buildString {
+         for ((index, field) in sortedFields.withIndex()) {
+            if (struct.usePadding && index > 0) {
+               val prevField = sortedFields[index - 1]
+               val expectedOffset = prevField.offset + prevField.type.size
+               val paddingSize = field.offset - expectedOffset
+               if (paddingSize > 0) {
+                  appendLine(""".addRow("$expectedOffset", "[PADDING]", "", "", "$paddingSize", "")""")
+               }
+            }
+            val typeName = field.type.name
+            val sbeName = field.type.sbeName
+            val size = field.type.size
+            val value = if (field.type.name == "String") field.name else "${field.name}.toString()"
+            appendLine(""".addRow("${field.offset}", "${field.name}", "$typeName", "$sbeName", "$size", $value)""")
+         }
+      }.trimEnd()
+
       """
       |@file:Suppress("unused")
       |
@@ -114,6 +138,17 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |${decodeBody.indent(6)}
       |      return decoder.encodedLength()
       |   }
+      |}
+      |
+      |fun ${struct.name}.sbeLayout() : CSV {
+      |   return CSV()
+      |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
+      |${layoutRows.indent(6)}
+      |      .addRow("$encodedLength", "[END]", "", "", "", "")
+      |}
+      |
+      |fun ${struct.name}.printSbeLayout() {
+      |   sbeLayout().print()
       |}
       |""".trimTemplate()
    }
@@ -217,12 +252,15 @@ internal fun KSP.generateComposite(struct: Composite): String {
       |   }
       |}
       |
-      |fun ${struct.name}.printSbeLayout() {
-      |   CSV()
-      |      .info("${struct.name} (totalSize = $encodedLength bytes)")
+      |fun ${struct.name}.sbeLayout() : CSV {
+      |   return CSV()
       |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
       |${printLayoutRows.indent(6)}
-      |      .print()
+      |      .addRow("$encodedLength", "[END]", "", "", "", "")
+      |}
+      |
+      |fun ${struct.name}.printSbeLayout() {
+      |   sbeLayout().print()
       |}
       |""".trimTemplate()
 }

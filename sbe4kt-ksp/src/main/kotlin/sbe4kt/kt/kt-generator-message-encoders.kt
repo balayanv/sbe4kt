@@ -43,22 +43,14 @@ internal fun generateEncodersSection(message: Message): String {
       |}
       |
       |fun encode$className($sourceVarName: $className, buffer: MutableDirectBuffer, offset: Int = 0): Int {
-      |   val headerEncoder = MessageHeaderEncoder()
-      |   val $encoderName = ${className}Encoder()
-      |   $encoderName.wrapAndApplyHeader(buffer, offset, headerEncoder)
-      |${encoderBody.indent(3)}
-      |   return MessageHeaderEncoder.ENCODED_LENGTH + $encoderName.encodedLength()
+      |   return ${className}RW(buffer, offset).encodeFrom($sourceVarName)
       |}
       |
-      |fun decode$className($targetVarName: $className, buffer: DirectBuffer, offset: Int = 0): Int {
-      |   val headerDecoder = MessageHeaderDecoder()
-      |   val $decoderName = ${className}Decoder()
-      |   $decoderName.wrapAndApplyHeader(buffer, offset, headerDecoder)
-      |${decoderBody.indent(3)}
-      |   return MessageHeaderDecoder.ENCODED_LENGTH + $decoderName.encodedLength()
+      |fun decode$className($targetVarName: $className, buffer: MutableDirectBuffer, offset: Int = 0): Int {
+      |   return ${className}RW(buffer, offset).decodeInto($targetVarName)
       |}
       |
       |fun $className.encodeTo(buffer: MutableDirectBuffer, offset: Int = 0): Int = encode$className(this, buffer, offset)
-      |fun $className.decodeFrom(buffer: DirectBuffer, offset: Int = 0): Int = decode$className(this, buffer, offset)
+      |fun $className.decodeFrom(buffer: MutableDirectBuffer, offset: Int = 0): Int = decode$className(this, buffer, offset)
       |""".trimTemplate()
 }

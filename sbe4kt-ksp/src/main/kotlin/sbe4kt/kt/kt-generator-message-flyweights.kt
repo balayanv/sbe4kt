@@ -65,7 +65,7 @@ internal fun generateFlyweightsSection(message: Message): String {
    val decodeIntoBody = fieldsSbeOrder.joinToString("\n") {
       when (it.type) {
          is Composite -> "${it.name}().decodeInto(target.${it.name})"
-         is Message -> "decode${it.type.name}(target.${it.name}, decoder.buffer(), decoder.offset() + ${className}Decoder.${it.name}EncodingOffset())"
+         is Message -> "decode${it.type.name}(target.${it.name}, encoder.buffer(), encoder.offset() + ${className}Encoder.${it.name}EncodingOffset())"
          is Union -> {
             val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${it.name}EncodingOffset()"
             "target.${it.name} = ${it.name}()"
