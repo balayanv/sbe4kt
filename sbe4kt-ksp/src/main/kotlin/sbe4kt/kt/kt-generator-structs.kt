@@ -13,7 +13,8 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
    val className = "${struct.name}Extensions"
 
    val imports = buildSet {
-      add("sbe4kt.lib.CSV")
+      add("sbe4kt.lib.SbeLayoutRow")
+      add("sbe4kt.lib.toCSV")
       add("kotlin.random.Random")
       struct.fields.forEach { field ->
          addAll(field.type.imports)
@@ -73,14 +74,14 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
                val expectedOffset = prevField.offset + prevField.type.size
                val paddingSize = field.offset - expectedOffset
                if (paddingSize > 0) {
-                  appendLine(""".addRow("$expectedOffset", "[PADDING]", "", "", "$paddingSize", "")""")
+                  appendLine("""SbeLayoutRow($expectedOffset, "[PADDING]", "", "", $paddingSize, ""),""")
                }
             }
             val typeName = field.type.name
             val sbeName = field.type.sbeName
             val size = field.type.size
             val value = if (field.type.name == "String") field.name else "${field.name}.toString()"
-            appendLine(""".addRow("${field.offset}", "${field.name}", "$typeName", "$sbeName", "$size", $value)""")
+            appendLine("""SbeLayoutRow(${field.offset}, "${field.name}", "$typeName", "$sbeName", $size, $value),""")
          }
       }.trimEnd()
 
@@ -140,15 +141,15 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |   }
       |}
       |
-      |fun ${struct.name}.sbeLayout() : CSV {
-      |   return CSV()
-      |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
+      |fun ${struct.name}.sbeLayout() : List<SbeLayoutRow> {
+      |   return listOf(
       |${layoutRows.indent(6)}
-      |      .addRow("$encodedLength", "[END]", "", "", "", "")
+      |      SbeLayoutRow($encodedLength, "[END]", "", "", 0, ""),
+      |   )
       |}
       |
       |fun ${struct.name}.printSbeLayout() {
-      |   sbeLayout().print()
+      |   sbeLayout().toCSV().print()
       |}
       |""".trimTemplate()
    }
@@ -186,22 +187,19 @@ internal fun KSP.generateComposite(struct: Composite): String {
 
    val printLayoutRows = buildString {
       for ((index, field) in sortedFields.withIndex()) {
-         // Show padding before field if there is a gap
          if (struct.usePadding && index > 0) {
             val prevField = sortedFields[index - 1]
             val expectedOffset = prevField.offset + prevField.type.size
             val paddingSize = field.offset - expectedOffset
             if (paddingSize > 0) {
-               appendLine(""".addRow("$expectedOffset", "[PADDING]", "", "", "$paddingSize", "")""")
+               appendLine("""SbeLayoutRow($expectedOffset, "[PADDING]", "", "", $paddingSize, ""),""")
             }
          }
-
-         // Show the field itself
          val typeName = field.type.name
          val sbeName = field.type.sbeName
          val size = field.type.size
          val value = if (field.type.name == "String") field.name else "${field.name}.toString()"
-         appendLine(""".addRow("${field.offset}", "${field.name}", "$typeName", "$sbeName", "$size", $value)""")
+         appendLine("""SbeLayoutRow(${field.offset}, "${field.name}", "$typeName", "$sbeName", $size, $value),""")
       }
    }.trimEnd()
 
@@ -252,15 +250,15 @@ internal fun KSP.generateComposite(struct: Composite): String {
       |   }
       |}
       |
-      |fun ${struct.name}.sbeLayout() : CSV {
-      |   return CSV()
-      |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
+      |fun ${struct.name}.sbeLayout() : List<SbeLayoutRow> {
+      |   return listOf(
       |${printLayoutRows.indent(6)}
-      |      .addRow("$encodedLength", "[END]", "", "", "", "")
+      |      SbeLayoutRow($encodedLength, "[END]", "", "", 0, ""),
+      |   )
       |}
       |
       |fun ${struct.name}.printSbeLayout() {
-      |   sbeLayout().print()
+      |   sbeLayout().toCSV().print()
       |}
       |""".trimTemplate()
 }

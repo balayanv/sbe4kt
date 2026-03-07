@@ -160,3 +160,30 @@ fun Long.toBinaryString(chunkSize: Int = 8) = this.toULong().toString(2).padStar
 
 fun branchlessMin(a : Int, b : Int) : Int = b + ((a - b) and ((a - b) shr 31))
 fun branchlessMax(a : Int, b : Int) : Int = a - ((a - b) and ((a - b) shr 31))
+
+data class SbeLayoutRow(
+   val offset: Int,
+   val field: String,
+   val type: String,
+   val sbeType: String,
+   val size: Int,
+   val value: String,
+   val metadata: String = "",
+)
+
+fun List<SbeLayoutRow>.toCSV(): CSV {
+   val csv = CSV()
+   csv.addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
+   for (row in this) {
+      csv.addRow(
+         row.offset.toString(),
+         row.field,
+         row.type,
+         row.sbeType,
+         if (row.size > 0) row.size.toString() else "",
+         row.value,
+         metadata = row.metadata
+      )
+   }
+   return csv
+}

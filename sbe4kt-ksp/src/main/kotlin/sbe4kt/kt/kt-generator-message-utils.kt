@@ -8,64 +8,53 @@ import sbe4kt.util.trimTemplate
 internal fun generateUtilsSection(message: Message): String {
    val className = message.name
    val sizeConstName = className.sbeSizeConstant()
-   val rows = generateRows(message)
+   val rows = generateLayoutRows(message)
    return $$"""
-      |fun $$className.sbeLayout() : CSV {
-      |   return CSV()
-      |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
-      |      .addRow("0", "[HEADER]", "Header", "", "${MessageHeaderEncoder.ENCODED_LENGTH}", "${$${className}Encoder.BLOCK_LENGTH}|${$${className}Encoder.TEMPLATE_ID}|${$${className}Encoder.SCHEMA_ID}|${$${className}Encoder.SCHEMA_VERSION}")
+      |fun $$className.sbeLayout() : List<SbeLayoutRow> {
+      |   return listOf(
+      |      SbeLayoutRow(0, "[HEADER]", "Header", "", 8, "${$${className}Encoder.BLOCK_LENGTH}|${$${className}Encoder.TEMPLATE_ID}|${$${className}Encoder.SCHEMA_ID}|${$${className}Encoder.SCHEMA_VERSION}"),
       |$${rows.indent(6)}
-      |      .addRow("$$$sizeConstName", "[END]", "", "", "", "")
+      |      SbeLayoutRow($$sizeConstName, "[END]", "", "", 0, ""),
+      |   )
       |}
       |
       |fun $$className.printSbeLayout() {
-      |   sbeLayout().print()
+      |   sbeLayout().toCSV().print()
       |}
       |""".trimTemplate()
 }
 
-private fun generateRows(message: Message): String {
+private fun generateLayoutRows(message: Message): String {
    val result = mutableListOf<String>()
-
-   fun addCsvRow(offset: Int, field: String, type: String, sbeType: String, size: String, value: String, metadata: String = "") {
-      if (metadata.isNotEmpty()) {
-         result.add(""".addRow("$offset", "$field", "$type", "$sbeType", "$size", $value, metadata = "$metadata")""")
-      } else {
-         result.add(""".addRow("$offset", "$field", "$type", "$sbeType", "$size", $value)""")
-      }
-   }
 
    val sortedFields = message.fields.sortedBy { it.sbeOrder }
    val headerSize = 8
 
    for ((index, fieldIr) in sortedFields.withIndex()) {
-      // show padding before field if there is a gap
       if (message.usePadding) {
          val expectedOffset = if (index == 0) 0 else sortedFields[index - 1].offset + sortedFields[index - 1].type.size
          val paddingSize = fieldIr.offset - expectedOffset
          if (paddingSize > 0) {
             val offset = expectedOffset + headerSize
-            addCsvRow(offset, "[PADDING]", "", "", paddingSize.toString(), "\"\"")
+            result.add("""SbeLayoutRow($offset, "[PADDING]", "", "", $paddingSize, ""),""")
          }
       }
 
-      // show the field itself
       val offset = fieldIr.offset + headerSize
       val field = fieldIr.name
       val type = fieldIr.type.name
       val sbeType = fieldIr.type.sbeName
-      val size = fieldIr.type.size.toString()
+      val size = fieldIr.type.size
       val value = if (fieldIr.type.name == "String") field else "$field.toString()"
-      addCsvRow(offset, field, type, sbeType, size, value)
+      result.add("""SbeLayoutRow($offset, "$field", "$type", "$sbeType", $size, $value),""")
    }
 
-   // show final padding if there is a gap
    if (message.usePadding && sortedFields.isNotEmpty()) {
       val lastField = sortedFields.last()
       val finalPadding = message.blockLength - (lastField.offset + lastField.type.size)
       if (finalPadding > 0) {
          val offset = lastField.offset + lastField.type.size + headerSize
-         addCsvRow(offset, "[PADDING]", "", "", finalPadding.toString(), "\"\"")
+         result.add("""SbeLayoutRow($offset, "[PADDING]", "", "", $finalPadding, ""),""")
       }
    }
 
