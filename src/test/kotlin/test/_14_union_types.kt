@@ -47,10 +47,10 @@ class UnionTypesTest {
          id = wrapperId,
          payload = Success1(timestamp = successId, value = 42L)
       )
-      encodeWrapper1(wrapper, buffer)
+      Wrapper1Codec.encodeFrom(wrapper, buffer, 0)
 
       val decoded = newWrapper1()
-      decodeWrapper1(decoded, buffer)
+      Wrapper1Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(wrapperId, decoded.id)
       assertTrue(decoded.payload is Success1)
@@ -70,10 +70,10 @@ class UnionTypesTest {
          id = wrapperId,
          payload = Failure1(timestamp = failureId, errorCode = 404)
       )
-      encodeWrapper1(wrapper, buffer)
+      Wrapper1Codec.encodeFrom(wrapper, buffer, 0)
 
       val decoded = newWrapper1()
-      decodeWrapper1(decoded, buffer)
+      Wrapper1Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(wrapperId, decoded.id)
       assertTrue(decoded.payload is Failure1)
@@ -86,7 +86,7 @@ class UnionTypesTest {
    @Test
    fun flyweightReadWriteSuccess() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fw = Wrapper1RW(buffer, 0)
+      val fw = Wrapper1FW().wrap(buffer)
 
       val wrapperId = TimeId(Nanos(5000000000L))
       val successId = TimeId(Nanos(6000000000L))
@@ -105,7 +105,7 @@ class UnionTypesTest {
    @Test
    fun flyweightReadWriteFailure() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fw = Wrapper1RW(buffer, 0)
+      val fw = Wrapper1FW().wrap(buffer)
 
       val wrapperId = TimeId(Nanos(7000000000L))
       val failureId = TimeId(Nanos(8000000000L))
@@ -124,7 +124,7 @@ class UnionTypesTest {
    @Test
    fun flyweightEncodeFromAndDecodeInto() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fw = Wrapper1RW(buffer, 0)
+      val fw = Wrapper1FW().wrap(buffer)
 
       val original = Wrapper1(
          id = TimeId(Nanos(9000000000L)),
@@ -149,9 +149,9 @@ class UnionTypesTest {
          id = TimeId(Nanos(11000000000L)),
          payload = Failure1(timestamp = TimeId(Nanos(12000000000L)), errorCode = 403)
       )
-      encodeWrapper1(wrapper, buffer)
+      Wrapper1Codec.encodeFrom(wrapper, buffer, 0)
 
-      val fwR = Wrapper1RW(buffer, 0)
+      val fwR = Wrapper1FW().wrap(buffer)
       assertEquals(TimeId(Nanos(11000000000L)), fwR.id())
 
       assertEquals(Failure1Codec.TEMPLATE_ID, fwR.payloadId())
@@ -162,14 +162,14 @@ class UnionTypesTest {
    @Test
    fun writeOnlyFlyweight() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fwW = Wrapper1RW(buffer, 0)
+      val fwW = Wrapper1FW().wrap(buffer)
 
       fwW.header()
       fwW.id(TimeId(Nanos(13000000000L)))
       fwW.payload(Success1(timestamp = TimeId(Nanos(14000000000L)), value = 888L))
 
       val decoded = newWrapper1()
-      decodeWrapper1(decoded, buffer)
+      Wrapper1Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(TimeId(Nanos(13000000000L)), decoded.id)
       assertTrue(decoded.payload is Success1)
@@ -179,7 +179,7 @@ class UnionTypesTest {
    @Test
    fun switchingUnionTypes() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fw = Wrapper1RW(buffer, 0)
+      val fw = Wrapper1FW().wrap(buffer)
 
       fw.id(TimeId(Nanos(15000000000L)))
       fw.payload(Success1(timestamp = TimeId.now(), value = 100L))
@@ -200,10 +200,10 @@ class UnionTypesTest {
          id = TimeId(Nanos(1000000000L)),
          payload = Service1Message.Success2(timestamp = TimeId(Nanos(2000000000L)), value = 42L)
       )
-      encodeWrapper2(wrapper, buffer)
+      Wrapper2Codec.encodeFrom(wrapper, buffer, 0)
 
       val decoded = newWrapper2()
-      decodeWrapper2(decoded, buffer)
+      Wrapper2Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(TimeId(Nanos(1000000000L)), decoded.id)
       assertTrue(decoded.payload is Service1Message.Success2)
@@ -218,10 +218,10 @@ class UnionTypesTest {
          id = TimeId(Nanos(3000000000L)),
          payload = Service1Message.Failure2(timestamp = TimeId(Nanos(4000000000L)), errorCode = 500)
       )
-      encodeWrapper2(wrapper, buffer)
+      Wrapper2Codec.encodeFrom(wrapper, buffer, 0)
 
       val decoded = newWrapper2()
-      decodeWrapper2(decoded, buffer)
+      Wrapper2Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(TimeId(Nanos(3000000000L)), decoded.id)
       assertTrue(decoded.payload is Service1Message.Failure2)
@@ -230,7 +230,7 @@ class UnionTypesTest {
 
    @Test
    fun sealedInterfaceFlyweight() {
-      val fw = Wrapper2RW()
+      val fw = Wrapper2FW().wrap(ByteArray(Wrapper2Codec.SIZE))
 
       fw.id(TimeId(Nanos(5000000000L)))
       fw.payload(Service1Message.Success2(timestamp = TimeId(Nanos(6000000000L)), value = 999L))

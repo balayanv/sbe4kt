@@ -18,10 +18,10 @@ class TimeIdTest {
       val timeWithTag = TimeId().ms(System.currentTimeMillis()).tag(77)
 
       val msg = Msg8(time = timeWithTag)
-      encodeMsg8(msg, buffer)
+      Msg8Codec.encodeFrom(msg, buffer, 0)
 
       val decoded = newMsg8()
-      decodeMsg8(decoded, buffer)
+      Msg8Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(77L, decoded.time.tag())
       assertEquals(timeWithTag.ms().millis, decoded.time.ms().millis)

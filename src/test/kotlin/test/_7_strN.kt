@@ -28,10 +28,10 @@ class StrNTest {
       val buffer = UnsafeBuffer(ByteArray(Trade4Codec.SIZE))
 
       val trade = Trade4(id = 1L, symbol = "HI", timestamp = 2L, price = 3L, amount = 4L)
-      encodeTrade4(trade, buffer)
+      Trade4Codec.encodeFrom(trade, buffer, 0)
 
       val decoded = newTrade4()
-      decodeTrade4(decoded, buffer)
+      Trade4Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals("HI", decoded.symbol)
    }
@@ -41,10 +41,10 @@ class StrNTest {
       val buffer = UnsafeBuffer(ByteArray(Trade4Codec.SIZE))
 
       val trade = Trade4(id = 1L, symbol = "12345678901234567890", timestamp = 2L, price = 3L, amount = 4L)
-      encodeTrade4(trade, buffer)
+      Trade4Codec.encodeFrom(trade, buffer, 0)
 
       val decoded = newTrade4()
-      decodeTrade4(decoded, buffer)
+      Trade4Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals("12345678901234567890", decoded.symbol)
    }

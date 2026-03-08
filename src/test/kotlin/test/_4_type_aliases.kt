@@ -31,10 +31,10 @@ class TypeAliasNestingTest {
       val buffer = UnsafeBuffer(ByteArray(Msg5Codec.SIZE))
 
       val msg = Msg5(f1 = ValueClass3(ValueClass2(Enum2.VALUE2)))
-      encodeMsg5(msg, buffer)
+      Msg5Codec.encodeFrom(msg, buffer, 0)
 
       val decoded = newMsg5()
-      decodeMsg5(decoded, buffer)
+      Msg5Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(ValueClass3(ValueClass2(Enum2.VALUE2)), decoded.f1)
    }

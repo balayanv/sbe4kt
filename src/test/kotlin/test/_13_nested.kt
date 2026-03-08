@@ -37,10 +37,10 @@ class NestedMessageTest {
          direction = Direction2.SELL,
          xy = XY2(time = TimeId(Nanos(1000000000L)), price = FPD.fromExact("100.5")),
       )
-      encodeSignal2(signal, buffer)
+      Signal2Codec.encodeFrom(signal, buffer, 0)
 
       val decoded = newSignal2()
-      decodeSignal2(decoded, buffer)
+      Signal2Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(Direction2.SELL, decoded.direction)
       assertEquals(TimeId(Nanos(1000000000L)), decoded.xy.time)
@@ -50,7 +50,7 @@ class NestedMessageTest {
    @Test
    fun flyweightNestedMessageAccess() {
       val buffer = UnsafeBuffer(ByteArray(Signal2Codec.SIZE))
-      val fw = Signal2RW(buffer, 0)
+      val fw = Signal2FW().wrap(buffer)
 
       fw.direction(Direction2.BUY)
       fw.xy()

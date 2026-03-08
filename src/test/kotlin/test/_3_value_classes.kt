@@ -24,10 +24,10 @@ class ValueClassesTest {
       val buffer = UnsafeBuffer(ByteArray(Msg4Codec.SIZE))
 
       val msg = Msg4(f1 = ValueClass1(underlying = 42))
-      encodeMsg4(msg, buffer)
+      Msg4Codec.encodeFrom(msg, buffer, 0)
 
       val decoded = newMsg4()
-      decodeMsg4(decoded, buffer)
+      Msg4Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(ValueClass1(42), decoded.f1)
    }

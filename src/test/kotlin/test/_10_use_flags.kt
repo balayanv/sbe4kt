@@ -47,7 +47,7 @@ package test
 //
 //   @Test
 //   fun flyweightFlagAccess() {
-//      val fw = OrderConfigRW()
+//      val fw = OrderConfigFW()
 //
 //      fw.price(FPD.from(50))
 //         .amount(FPD.from(5))

@@ -32,7 +32,7 @@ class CompositeTest {
    @Test
    fun flyweightCompositeAccess() {
       val buffer = UnsafeBuffer(ByteArray(1024))
-      val fw = Signal1RW(buffer, 100)
+      val fw = Signal1FW().wrap(buffer, 100)
 
       fw.f1(Direction1.SELL)
       fw.f2()
@@ -52,10 +52,10 @@ class CompositeTest {
          f1 = Direction1.BUY,
          f2 = XY1(time = TimeId(Nanos(1234000000L)), price = FPD.fromExact("78000.0")),
       )
-      encodeSignal1(signal, buffer)
+      Signal1Codec.encodeFrom(signal, buffer, 0)
 
       val decoded = newSignal1()
-      decodeSignal1(decoded, buffer)
+      Signal1Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(Direction1.BUY, decoded.f1)
       assertEquals(TimeId(Nanos(1234000000L)), decoded.f2.time)

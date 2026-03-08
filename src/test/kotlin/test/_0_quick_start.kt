@@ -26,10 +26,10 @@ class QuickStartTest {
       val trade = Trade1(id = 111L, symbol = 42, timestamp = 222L, price = 333L, amount = 444L)
       val buffer = UnsafeBuffer(ByteArray(Trade1Codec.SIZE))
 
-      encodeTrade1(trade, buffer)
+      Trade1Codec.encodeFrom(trade, buffer, 0)
 
       val decoded = newTrade1()
-      decodeTrade1(decoded, buffer)
+      Trade1Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(trade, decoded)
    }

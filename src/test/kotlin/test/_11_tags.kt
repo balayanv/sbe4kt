@@ -9,10 +9,6 @@ import sbe4kt.lib.MicroTag4
 import sbe4kt.lib.TimeId
 import sbe4kt.lib.us
 
-/**
- * Some sort of diagnostic message (like heartbeat), that traces trough multiple hot path services,
- * to collect realtime telemetry data...
- */
 @SBE
 data class LatencyTracer(
    var created: TimeId,
@@ -50,10 +46,10 @@ class TagsTest {
       tracer.recordMileStone3(baseTime.add(15.us))
       tracer.recordMileStone4(baseTime.add(20.us))
 
-      encodeLatencyTracer(tracer, buffer)
+      encodeLatencyTracerSBE(tracer, buffer)
 
       val decoded = newLatencyTracer()
-      decodeLatencyTracer(decoded, buffer)
+      decodeLatencyTracerSBE(decoded, buffer)
 
       assertEquals(baseTime.add(5.us).ns().nanos, decoded.getTimeMileStone1().ns().nanos)
       assertEquals(baseTime.add(10.us).ns().nanos, decoded.getTimeMileStone2().ns().nanos)

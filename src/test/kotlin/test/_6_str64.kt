@@ -30,10 +30,10 @@ class Str64Test {
       val buffer = UnsafeBuffer(ByteArray(Trade3Codec.SIZE))
 
       val trade = Trade3(id = 1L, symbol = TestSymbol1Str64.from("ABC"), timestamp = 2L, price = 3L, amount = 4L)
-      encodeTrade3(trade, buffer)
+      Trade3Codec.encodeFrom(trade, buffer, 0)
 
       val decoded = newTrade3()
-      decodeTrade3(decoded, buffer)
+      Trade3Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals("ABC", decoded.symbol.toString())
    }
@@ -43,17 +43,17 @@ class Str64Test {
       val buffer = UnsafeBuffer(ByteArray(Trade3Codec.SIZE))
 
       val trade = Trade3(id = 1L, symbol = TestSymbol1Str64.from("XBTUSDTH26"), timestamp = 2L, price = 3L, amount = 4L)
-      encodeTrade3(trade, buffer)
+      Trade3Codec.encodeFrom(trade, buffer, 0)
 
       val decoded = newTrade3()
-      decodeTrade3(decoded, buffer)
+      Trade3Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals("XBTUSDTH26", decoded.symbol.toString())
    }
 
    @Test
    fun flyweightStr64() {
-      val fw = Trade3RW()
+      val fw = Trade3FW().wrap(ByteArray(Trade3Codec.SIZE))
       fw.symbol(TestSymbol1Str64.from("ETH_USD"))
       assertEquals("ETH_USD", fw.symbol().toString())
    }
