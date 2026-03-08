@@ -8,7 +8,7 @@ import org.agrona.concurrent.UnsafeBuffer;
 public class Example {
 
     static void main(String[] args) {
-        var fw = new MsgRW(new UnsafeBuffer(new byte[MsgCodec.SIZE]), 0);
+        var fw = new MsgFW().wrap(new byte[MsgCodec.SIZE]);
 
         for (int i = 0; i < 100; i++) {
             var random = MsgExtensionsKt.randomMsg();
@@ -20,6 +20,6 @@ public class Example {
             assert random.equals(target) : "Mismatch at iteration " + i;
         }
 
-        MsgExtensionsKt.printSbeLayout(MsgExtensionsKt.randomMsg());
+        MsgExtensionsKt.printSbeLayout(MsgExtensionsKt.randomMsg(), false);
     }
 }

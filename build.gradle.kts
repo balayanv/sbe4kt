@@ -37,7 +37,7 @@ dependencies {
 }
 
 application {
-   mainClass.set("example.CompositeKt")
+   mainClass.set("example.ExampleKt")
    applicationDefaultJvmArgs = listOf(jvmUnsafeAccessArg, jvmAddExportsArg)
 }
 
