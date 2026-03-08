@@ -18,8 +18,8 @@ internal fun generateUtilsSection(message: Message): String {
    val codecName = "${className}Codec"
    val rows = generateRows(message)
    return $$"""
-      |fun $$className.printSbeLayout(verbose: Boolean = false) {
-      |   var rows = CSV()
+      |fun $$className.sbeLayout() : CSV {
+      |   return CSV()
       |      .info("$$className (totalSize = ${$$codecName.SIZE} bytes)")
       |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
       |      .separator()
@@ -27,7 +27,10 @@ internal fun generateUtilsSection(message: Message): String {
       |      .separator(metadata = "optional.separator")
       |      .addRow("0", "[HEADER]", "Header", "", "${$$codecName.HEADER_SIZE}", "${$$codecName.BLOCK_LENGTH}|${$$codecName.TEMPLATE_ID}|${$$codecName.SCHEMA_ID}|${$$codecName.SCHEMA_VERSION}")
       |$${rows.indent(6)}
-      |      .rows
+      |}
+      |
+      |fun $$className.printSbeLayout(verbose: Boolean = false) {
+      |   var rows = this.sbeLayout().rows
       |
       |   if (verbose) {
       |      rows = rows.filterNot { it.metadata.startsWith("info") }.toMutableList()

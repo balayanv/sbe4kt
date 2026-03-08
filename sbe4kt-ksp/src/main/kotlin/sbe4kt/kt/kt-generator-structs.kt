@@ -120,12 +120,15 @@ private fun generateStructPrintLayout(struct: Struct): String {
    }.trimEnd()
 
    return """
-      |fun ${struct.name}.printSbeLayout() {
-      |   CSV()
+      |fun ${struct.name}.sbeLayout() : CSV {
+      |   return CSV()
       |      .info("${struct.name} (totalSize = $encodedLength bytes)")
       |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
       |      .separator()
       |${printLayoutRows.indent(6)}
-      |      .print()
+      |}
+      |
+      |fun ${struct.name}.printSbeLayout() {
+      |   sbeLayout().print()
       |}""".trimTemplate()
 }
