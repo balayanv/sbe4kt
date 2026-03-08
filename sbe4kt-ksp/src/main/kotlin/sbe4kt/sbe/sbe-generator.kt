@@ -2,11 +2,18 @@ package sbe4kt.sbe
 
 import sbe4kt.KSP
 import sbe4kt.ir.ByteArrayN
+import sbe4kt.ir.DoubleArrayN
 import sbe4kt.ir.Enum
+import sbe4kt.ir.FloatArrayN
 import sbe4kt.ir.IR
+import sbe4kt.ir.IntArrayN
+import sbe4kt.ir.CharArrayN
+import sbe4kt.ir.LongArrayN
 import sbe4kt.ir.Message
+import sbe4kt.ir.ShortArrayN
 import sbe4kt.ir.StringN
 import sbe4kt.ir.Struct
+import sbe4kt.ir.ArrayN
 import sbe4kt.ir.Union
 import sbe4kt.migration.PrevMessage
 import sbe4kt.util.indent
@@ -19,7 +26,12 @@ internal fun KSP.generateSbe() {
 
    val schemaFile = File(resourcesDir, "sbe-schema.xml")
    val byteArrayTypes = ir.byteArraySizes.joinToString("\n") { generateByteArrayType(it) }
-   val stringTypes = ir.fixedStrings.joinToString("\n") { generateStringType(it) }
+   val shortArrayTypes = ir.shortArraySizes.joinToString("\n") { generateShortArrayType(it) }
+   val intArrayTypes = ir.intArraySizes.joinToString("\n") { generateIntArrayType(it) }
+   val longArrayTypes = ir.longArraySizes.joinToString("\n") { generateLongArrayType(it) }
+   val floatArrayTypes = ir.floatArraySizes.joinToString("\n") { generateFloatArrayType(it) }
+   val doubleArrayTypes = ir.doubleArraySizes.joinToString("\n") { generateDoubleArrayType(it) }
+   val charArrayTypes = ir.charArraySizes.joinToString("\n") { generateCharArrayType(it) }
    val structs = ir.structs.joinToString("\n") { generateCompositeType(it) }
    val activeMessages = ir.messages.joinToString("\n") { generateMessageBody(it, version) }
    val deprecatedMessages = ir.deprecatedMessages.joinToString("\n") { generateDeprecatedMessageBody(it, version) }
@@ -44,7 +56,17 @@ internal fun KSP.generateSbe() {
       |
       |${byteArrayTypes.indent(6)}
       |
-      |${stringTypes.indent(6)}
+      |${shortArrayTypes.indent(6)}
+      |
+      |${intArrayTypes.indent(6)}
+      |
+      |${longArrayTypes.indent(6)}
+      |
+      |${floatArrayTypes.indent(6)}
+      |
+      |${doubleArrayTypes.indent(6)}
+      |
+      |${charArrayTypes.indent(6)}
       |
       |${structs.indent(6)}
       |   </types>
@@ -200,7 +222,7 @@ private fun generateCompositeType(struct: Struct): String {
 
 private fun generateCompositeField(fieldName: String, type: IR.Leaf, offset: Int = -1): String {
    val isPrimitive = when (type) {
-      is StringN, is ByteArrayN, is Enum, is Struct, is Union -> false
+      is ByteArrayN, is ShortArrayN, is IntArrayN, is LongArrayN, is FloatArrayN, is DoubleArrayN, is CharArrayN, is StringN, is Enum, is Struct, is ArrayN, is Union -> false
       else -> true
    }
 
@@ -226,4 +248,14 @@ private fun generateDeprecatedMessageBody(prevMsg: PrevMessage, schemaVersion: I
 
 private fun generateByteArrayType(size: Int) = "<type name='ByteArray$size' primitiveType='uint8' length='$size'/>"
 
-private fun generateStringType(strN: StringN) = "<type name='${strN.sbeName}' primitiveType='char' length='${strN.length}' characterEncoding='${strN.encoding.sbeEncoding}'/>"
+private fun generateShortArrayType(size: Int) = "<type name='ShortArray$size' primitiveType='int16' length='$size'/>"
+
+private fun generateIntArrayType(size: Int) = "<type name='IntArray$size' primitiveType='int32' length='$size'/>"
+
+private fun generateLongArrayType(size: Int) = "<type name='LongArray$size' primitiveType='int64' length='$size'/>"
+
+private fun generateFloatArrayType(size: Int) = "<type name='FloatArray$size' primitiveType='float' length='$size'/>"
+
+private fun generateDoubleArrayType(size: Int) = "<type name='DoubleArray$size' primitiveType='double' length='$size'/>"
+
+private fun generateCharArrayType(size: Int) = "<type name='CharArray$size' primitiveType='char' length='$size' characterEncoding='US-ASCII'/>"

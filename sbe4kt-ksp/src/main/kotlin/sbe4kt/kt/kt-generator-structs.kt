@@ -41,16 +41,19 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |""".trimTemplate()
    } else {
       val codecSection = generateCompositeCodecSection(struct)
-      val rwSection = generateCompositeRWSection(struct)
+      val rwSection = generateCompositeFWSection(struct)
       val printLayoutSection = generateStructPrintLayout(struct)
 
       """
       |package $packageName
       |
       |$importStatements
+      |
       |import org.agrona.DirectBuffer
       |import org.agrona.MutableDirectBuffer
       |import org.agrona.concurrent.UnsafeBuffer
+      |import java.nio.ByteBuffer
+      |import java.nio.ByteOrder
       |
       |fun new${struct.name}(): ${struct.name} {
       |   return ${struct.name}($defaultArgs)
@@ -121,6 +124,7 @@ private fun generateStructPrintLayout(struct: Struct): String {
       |   CSV()
       |      .info("${struct.name} (totalSize = $encodedLength bytes)")
       |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
+      |      .separator()
       |${printLayoutRows.indent(6)}
       |      .print()
       |}""".trimTemplate()

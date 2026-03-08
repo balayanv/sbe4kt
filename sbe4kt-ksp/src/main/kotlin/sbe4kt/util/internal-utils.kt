@@ -5,7 +5,6 @@ import com.google.devtools.ksp.symbol.ClassKind.ENUM_CLASS
 import com.google.devtools.ksp.symbol.Modifier.INLINE
 import com.google.devtools.ksp.symbol.Modifier.VALUE
 import sbe4kt.KSP.log
-import sbe4kt.META.Encoding
 import sbe4kt.ir.Field
 
 // validation
@@ -104,9 +103,6 @@ internal fun KSPropertyDeclaration.metaAnnotation() = this.annotations.find { it
 internal fun KSAnnotation?.allowVarLengthFields() = supplyOrDefaultTo(false) { this!!.arguments.find { it.name!!.asString() == "allowVarLengthFields" }!!.value as Boolean }
 internal fun KSAnnotation?.size() = supplyOrDefaultTo(-1) { this!!.arguments.find { it.name!!.asString() == "size" }!!.value as Int }
 internal fun KSAnnotation?.removeAfter() = supplyOrDefaultTo(-1) { this!!.arguments.find { it.name!!.asString() == "removeAfter" }!!.value as Int }
-
-// this is fragile but i dont know what the heck is the api to actually extract the Enum value of the annotation argument...
-internal fun KSAnnotation?.encoding() = supplyOrDefaultTo(Encoding.ASCII) { Encoding.valueOf(this!!.arguments.find { it.name!!.asString() == "encoding" }!!.value.toString().removePrefix("Encoding.")) }
 
 internal fun KSAnnotation?.tags(): List<String> {
    if (this == null) return emptyList()
