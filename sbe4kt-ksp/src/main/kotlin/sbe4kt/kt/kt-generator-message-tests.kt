@@ -19,10 +19,10 @@ internal fun generateTestsSection(message: Message): String {
       |      repeat(100) {
       |         val original = random$className()
       |         val bytesWritten = original.encodeTo(buffer)
-      |         
+      |
       |         val decoded = new$className()
       |         val bytesRead = decoded.decodeFrom(buffer)
-      |         
+      |
       |         assertTrue(bytesWritten > 0)
       |         assertEquals(bytesWritten, bytesRead)
       |         assertEquals(original, decoded)
@@ -31,8 +31,7 @@ internal fun generateTestsSection(message: Message): String {
       |
       |   @Test
       |   fun testFlyweights() {
-      |      val buffer = UnsafeBuffer(ByteArray($sizeConstName))
-      |      val wrapper = ${className}RW(buffer, 0)
+      |      val wrapper = ${className}RW()
       |      repeat(100) {
       |         val original = random$className()
       |         wrapper.encodeFrom(original)

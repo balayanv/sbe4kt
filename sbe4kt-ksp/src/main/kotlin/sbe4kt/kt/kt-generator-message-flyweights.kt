@@ -101,6 +101,8 @@ internal fun generateFlyweightsSection(message: Message): String {
       |${compositeFwInits.indent(6)}
       |   }
       |
+      |   constructor() : this(UnsafeBuffer(ByteArray($sizeConstName)), 0)
+      |
       |   constructor(buffer: MutableDirectBuffer, offset: Int){
       |      this.encoder = ${className}Encoder()
       |      this.decoder = ${className}Decoder()
@@ -128,6 +130,8 @@ internal fun generateFlyweightsSection(message: Message): String {
       |${decodeIntoBody.indent(6)}
       |      return MessageHeaderDecoder.ENCODED_LENGTH + decoder.encodedLength()
       |   }
+      |
+      |   fun size() = $sizeConstName
       |}
       |""".trimTemplate()
 }
