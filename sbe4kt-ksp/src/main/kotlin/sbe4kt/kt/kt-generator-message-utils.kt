@@ -96,7 +96,7 @@ private fun generateRows(message: Message): String {
       } else {
          val offset = fieldIr.offset + headerSize
          val field = fieldIr.name
-         val type = fieldIr.type.name
+         val type = if (fieldIr.type is ArrayN) "${(fieldIr.type as ArrayN).structType.name}[${(fieldIr.type as ArrayN).length}]" else fieldIr.type.name
          val sbeType = fieldIr.type.sbeName
          val size = fieldIr.type.size.toString()
          val value = when {
