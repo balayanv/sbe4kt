@@ -175,15 +175,21 @@ fun List<SbeLayoutRow>.toCSV(): CSV {
    val csv = CSV()
    csv.addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
    for (row in this) {
-      csv.addRow(
-         row.offset.toString(),
-         row.field,
-         row.type,
-         row.sbeType,
-         if (row.size > 0) row.size.toString() else "",
-         row.value,
-         metadata = row.metadata
-      )
+      if (row.metadata == "separator") {
+         csv.separator()
+      } else {
+         csv.addRow(
+            row.offset.toString(),
+            row.field,
+            row.type,
+            row.sbeType,
+            if (row.size > 0) row.size.toString() else "",
+            row.value,
+            metadata = row.metadata
+         )
+      }
    }
+   val endOffset = if (isEmpty()) 0 else last().let { it.offset + it.size }
+   csv.addRow(endOffset.toString(), "[END]", "", "", "", "")
    return csv
 }

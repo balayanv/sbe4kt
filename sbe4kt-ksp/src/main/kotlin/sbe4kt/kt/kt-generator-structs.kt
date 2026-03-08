@@ -141,10 +141,9 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |   }
       |}
       |
-      |fun ${struct.name}.sbeLayout() : List<SbeLayoutRow> {
+      |internal fun ${struct.name}.sbeLayout() : List<SbeLayoutRow> {
       |   return listOf(
       |${layoutRows.indent(6)}
-      |      SbeLayoutRow($encodedLength, "[END]", "", "", 0, ""),
       |   )
       |}
       |
@@ -250,10 +249,9 @@ internal fun KSP.generateComposite(struct: Composite): String {
       |   }
       |}
       |
-      |fun ${struct.name}.sbeLayout() : List<SbeLayoutRow> {
+      |internal fun ${struct.name}.sbeLayout() : List<SbeLayoutRow> {
       |   return listOf(
       |${printLayoutRows.indent(6)}
-      |      SbeLayoutRow($encodedLength, "[END]", "", "", 0, ""),
       |   )
       |}
       |
