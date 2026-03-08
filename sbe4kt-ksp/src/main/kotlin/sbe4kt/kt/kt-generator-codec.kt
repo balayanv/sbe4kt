@@ -1,5 +1,6 @@
 package sbe4kt.kt
 
+import sbe4kt.KSP
 import sbe4kt.ir.*
 import sbe4kt.ir.Char
 import sbe4kt.ir.Double
@@ -8,10 +9,12 @@ import sbe4kt.ir.Float
 import sbe4kt.util.indent
 import sbe4kt.util.trimTemplate
 
-internal fun generateCodecSection(message: Message, schemaVersion: Int, schemaId: Int): String {
+internal fun KSP.generateCodecSection(message: Message): String {
    val className = message.name
    val blockLength = message.blockLength
    val templateId = message.id
+   val schemaId = ir.previousSchema?.schemaId ?: 1
+   val schemaVersion = ir.evolution?.newVersion ?: 0
 
    val hasUnsupportedFields = message.fields.any { !isSupportedCodecType(it.type) }
    if (hasUnsupportedFields) {

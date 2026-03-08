@@ -23,9 +23,8 @@ internal fun KSP.generateKotlinExtensionsForMessage(
    val importsSection = message.allImports().joinToString("\n") { "import $it" }
 
    // Generate the different sections
-   val helpersSection = generateEncodersSection(message)
-   val schemaVersion = ir.evolution?.newVersion ?: 0
-   val codecSection = generateCodecSection(message, schemaVersion, schemaId = 1)
+   val sbeEncoderDecoderSection = generateEncodersSection(message)
+   val codecSection = generateCodecSection(message)
    val flyweightsSection = generateFlyweightsSection(message)
    val utilsSection = generateUtilsSection(message)
    val extensionsSection = generateTagsSection(message)
@@ -34,7 +33,8 @@ internal fun KSP.generateKotlinExtensionsForMessage(
       |package $packageName
       |
       |$importsSection
-      |$helpersSection
+      |
+      |$sbeEncoderDecoderSection
       |
       |$codecSection
       |
