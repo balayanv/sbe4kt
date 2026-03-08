@@ -33,12 +33,6 @@ annotation class SBE(
    val isStruct: Boolean = false,
 
    /**
-    * Adds a bitset which tracks which fields were actually set.
-    * Up to 64 such fields can exist per message.
-    */
-   val allowNullableTypes: Boolean = false,
-
-   /**
     * Allows use of variable length fields.
     * Cannot be used with `usePadding`.
     * Will disable generation of flyweights for this type.
@@ -49,4 +43,10 @@ annotation class SBE(
     * Uses i64 bitset to keep track of nullability of fields and boolean flags.
     */
    val compactFlags: Boolean = false,
+
+   /**
+    * Adds a bitset which tracks which fields were actually set.
+    * Up to 64 such fields can exist per message.
+    */
+   val allowNullableTypes: Boolean = false,
 )

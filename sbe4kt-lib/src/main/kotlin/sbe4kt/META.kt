@@ -26,29 +26,19 @@ annotation class META(
    val size: Int = -1,
 
    /**
-    * SBE supports one of the two, by default its ASCII.
-    */
-   val encoding: Encoding = Encoding.ASCII,
-
-   /**
     * Allowed types for a union field, must be a message or composite/struct.
     */
    val oneOf: Array<KClass<*>> = [],
 
-
    /**
     * Tags at which point measurements taken.
-    * Order is matched with MicroTag4 slots.
+    * First element is the anchor field name (must be a TimeId field on the same message).
+    * Remaining elements are milestone names that generate record/getTime methods.
     */
-   val tags : Array<String> = [],
+   val tags: Array<String> = [],
 
    /**
     * If positive number it is indicated that the field will not be available after specified schema version.
     */
    val removeAfter : Int = -1,
-) {
-   enum class Encoding(val sbeEncoding : String) {
-      ASCII("US-ASCII"),
-      UTF8("UTF-8"),
-   }
-}
+)
