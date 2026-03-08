@@ -3,6 +3,7 @@ package sbe4kt.kt
 import com.google.devtools.ksp.processing.Dependencies
 import sbe4kt.KSP
 import sbe4kt.ir.Message
+import sbe4kt.ir.Tags
 import sbe4kt.util.trimTemplate
 
 internal fun KSP.generateKotlinExtensionsForMessage(
@@ -27,7 +28,7 @@ internal fun KSP.generateKotlinExtensionsForMessage(
    val codecSection = generateCodecSection(message, schemaVersion, schemaId = 1)
    val flyweightsSection = generateFlyweightsSection(message)
    val utilsSection = generateUtilsSection(message)
-   val microTagSection = generateMicroTagSection(message)
+   val extensionsSection = generateTagsSection(message)
 
    val result = """
       |package $packageName
@@ -41,8 +42,20 @@ internal fun KSP.generateKotlinExtensionsForMessage(
       |
       |$utilsSection
       |
-      |$microTagSection
+      |$extensionsSection
       |""".trimTemplate()
 
    file.bufferedWriter().use { it.write(result) }
+}
+
+private fun generateTagsSection(message: Message): String {
+   val className = message.name
+   val taggedFields = message.fields.filter { it.type is Tags }
+   if (taggedFields.isEmpty()) return ""
+
+   return buildString {
+      for (field in taggedFields) {
+         append((field.type as Tags).generateDataClassExtensions(className, field.name))
+      }
+   }.trimEnd()
 }
