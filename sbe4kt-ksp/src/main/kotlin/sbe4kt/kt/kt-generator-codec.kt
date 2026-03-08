@@ -1,6 +1,5 @@
 package sbe4kt.kt
 
-import sbe4kt.META.Encoding
 import sbe4kt.ir.*
 import sbe4kt.ir.Char
 import sbe4kt.ir.Double
@@ -14,53 +13,111 @@ internal fun generateCodecSection(message: Message, schemaVersion: Int, schemaId
    val blockLength = message.blockLength
    val templateId = message.id
 
-   // skip codec generation for messages with unsupported field types
    val hasUnsupportedFields = message.fields.any { !isSupportedCodecType(it.type) }
    if (hasUnsupportedFields) {
-      return "// ${className}Codec skipped: contains composite, nested message, or union fields (not yet supported)"
+      return "// ${className}Codec skipped: contains unsupported field types (not yet supported)"
    }
-
-   val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
-   val fieldsSbeOrder = message.fields.sortedBy { it.sbeOrder }
 
    val packedHeader = (blockLength.toLong() and 0xFFFF) or
       ((templateId.toLong() and 0xFFFF) shl 16) or
       ((schemaId.toLong() and 0xFFFF) shl 32) or
       ((schemaVersion.toLong() and 0xFFFF) shl 48)
 
+   val headerConstants = """
+      |const val BLOCK_LENGTH = $blockLength
+      |const val TEMPLATE_ID = $templateId
+      |const val SCHEMA_ID = $schemaId
+      |const val SCHEMA_VERSION = $schemaVersion
+      |const val HEADER_SIZE = 8
+      |
+      |const val SIZE = HEADER_SIZE + BLOCK_LENGTH
+      |const val PACKED_HEADER = ${packedHeader}L""".trimTemplate()
+
+   val headerMethods = """
+      |fun blockLength(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset).toInt() and 0xFFFF
+      |fun templateId(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 2).toInt() and 0xFFFF
+      |fun schemaId(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 4).toInt() and 0xFFFF
+      |fun version(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 6).toInt() and 0xFFFF
+      |fun header(buffer: MutableDirectBuffer, offset: Int = 0) { buffer.putLong(offset, PACKED_HEADER) }""".trimTemplate()
+
+   val encodePrefix = "header(buffer, offset)"
+   val decodePrefix = "val tid = templateId(buffer, offset)\n" +
+      $$"if (tid != TEMPLATE_ID) throw IllegalStateException(\"Invalid TEMPLATE_ID: $tid, expected: $TEMPLATE_ID\")"
+
+   return generateCodecObject(
+      className = className,
+      fields = message.fields,
+      headerOffset = 8,
+      constants = headerConstants,
+      headerMethods = headerMethods,
+      encodePrefix = encodePrefix,
+      decodePrefix = decodePrefix,
+   )
+}
+
+internal fun generateCompositeCodecSection(struct: Struct): String {
+   val hasUnsupportedFields = struct.fields.any { !isSupportedCodecType(it.type) }
+   if (hasUnsupportedFields) {
+      return "// ${struct.name}Codec skipped: contains unsupported field types"
+   }
+
+   return generateCodecObject(
+      className = struct.name,
+      fields = struct.fields,
+      headerOffset = 0,
+      constants = "const val SIZE = ${struct.encodedLength}",
+   )
+}
+
+private fun generateCodecObject(
+   className: String,
+   fields: List<Field>,
+   headerOffset: Int,
+   constants: String,
+   headerMethods: String? = null,
+   encodePrefix: String? = null,
+   decodePrefix: String? = null,
+): String {
+   val fieldsDecOrder = fields.sortedBy { it.declarationOrder }
+   val fieldsSbeOrder = fields.sortedBy { it.sbeOrder }
+
    val relativeOffsets = fieldsDecOrder.joinToString("\n") { field ->
       val fieldUpper = field.name.uppercase()
-      "const val RELATIVE_OFFSET_${fieldUpper}=${8 + field.offset}"
+      "const val RELATIVE_OFFSET_${fieldUpper}=${headerOffset + field.offset}"
    }
 
    val offsetFns = fieldsDecOrder.joinToString("\n") { field ->
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       val fieldUpper = field.name.uppercase()
-      "fun offset${fieldCap}(offset: Int) = offset + RELATIVE_OFFSET_${fieldUpper}"
+      "fun offset${fieldCap}(offset: Int = 0) = offset + RELATIVE_OFFSET_${fieldUpper}"
    }
 
-   val simpleFields = fieldsDecOrder.filter { it.type !is Struct && it.type !is Message && it.type !is Union }
+   val simpleFields = fieldsDecOrder.filter { it.type !is Struct && it.type !is Message && it.type !is Union && it.type !is ByteArrayN && it.type !is ShortArrayN && it.type !is IntArrayN && it.type !is LongArrayN && it.type !is FloatArrayN && it.type !is DoubleArrayN && it.type !is CharArrayN && it.type !is StringN && it.type !is ArrayN }
 
    val fieldAccessors = simpleFields.joinToString("\n\n") { field ->
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       val sbeType = sbeKotlinType(field.type)
-      "fun ${field.name}(buffer: DirectBuffer, offset: Int): $sbeType = ${
-         sbeGet(
-            field.type, "offset${fieldCap}(offset)"
-         )
-      }\n" + "fun ${field.name}(buffer: MutableDirectBuffer, offset: Int, value: $sbeType) { ${
-         sbePut(
-            field.type, "offset${fieldCap}(offset)", "value"
-         )
+      "fun ${field.name}(buffer: DirectBuffer, offset: Int = 0): $sbeType = ${
+         sbeGet(field.type, "offset${fieldCap}(offset)")
+      }\n" + "fun ${field.name}(buffer: MutableDirectBuffer, offset: Int = 0, value: $sbeType) { ${
+         sbePut(field.type, "offset${fieldCap}(offset)", "value")
       } }"
    }
 
-   // encodeFrom/decodeInto: simple fields use local accessors, composite/nested/union fields delegate
    val encodeBody = fieldsSbeOrder.joinToString("\n") { field ->
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
          is Struct, is Message -> "${field.type.name}Codec.encodeFrom(source.${field.name}, buffer, offset${fieldCap}(offset))"
-         is Union -> generateUnionEncodeExpr(field.type as Union, field.name, fieldCap)
+         is Union -> generateUnionEncodeExpr(field.type, field.name, fieldCap)
+         is ByteArrayN -> "ByteArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is ShortArrayN -> "ShortArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is IntArrayN -> "IntArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is LongArrayN -> "LongArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is FloatArrayN -> "FloatArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is DoubleArrayN -> "DoubleArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is CharArrayN -> "CharArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is StringN -> "CharArrayCodec.encodeFromCharSequence(source.${field.name}, 0, branchlessMin(source.${field.name}.length, ${field.type.length}), buffer, offset${fieldCap}(offset))"
+         is ArrayN -> "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.encodeFrom(source.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.structType.encodedLength})"
          else -> "${field.name}(buffer, offset, ${convertToSbe(field.type, "source.${field.name}")})"
       }
    }
@@ -69,45 +126,40 @@ internal fun generateCodecSection(message: Message, schemaVersion: Int, schemaId
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
          is Struct, is Message -> "${field.type.name}Codec.decodeInto(target.${field.name}, buffer, offset${fieldCap}(offset))"
-         is Union -> generateUnionDecodeExpr(field.type as Union, field.name, fieldCap)
+         is Union -> generateUnionDecodeExpr(field.type, field.name, fieldCap)
+         is ByteArrayN -> "ByteArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is ShortArrayN -> "ShortArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is IntArrayN -> "IntArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is LongArrayN -> "LongArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is FloatArrayN -> "FloatArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is DoubleArrayN -> "DoubleArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is CharArrayN -> "CharArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is StringN -> "target.${field.name} = StringBuilder(${field.type.length}).also { CharArrayCodec.decodeIntoAppendable(it, ${field.type.length}, buffer, offset${fieldCap}(offset)) }.toString()"
+         is ArrayN -> "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.decodeInto(target.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.structType.encodedLength})"
          else -> "target.${field.name} = ${convertFromSbe(field.type, "${field.name}(buffer, offset)")}"
       }
    }
 
+   val headerMethodsBlock = if (headerMethods != null) "\n${headerMethods.indent(3)}\n" else ""
+   val fullEncodeBody = listOfNotNull(encodePrefix, encodeBody.ifEmpty { null }).joinToString("\n")
+   val fullDecodeBody = listOfNotNull(decodePrefix, decodeBody.ifEmpty { null }).joinToString("\n")
+
    return """
       |object ${className}Codec {
-      |   const val BLOCK_LENGTH = $blockLength
-      |   const val TEMPLATE_ID = $templateId
-      |   const val SCHEMA_ID = $schemaId
-      |   const val SCHEMA_VERSION = $schemaVersion
-      |   const val HEADER_SIZE = 8
-      |
-      |   const val SIZE = HEADER_SIZE + BLOCK_LENGTH
-      |   const val PACKED_HEADER = ${packedHeader}L
+      |${constants.indent(3)}
       |
       |${relativeOffsets.indent(3)}
       |
-      |   val BYTE_ORDER: java.nio.ByteOrder = java.nio.ByteOrder.LITTLE_ENDIAN
-      |
       |${offsetFns.indent(3)}
-      |
-      |   fun blockLength(buffer: DirectBuffer, offset: Int): Int = buffer.getShort(offset, BYTE_ORDER).toInt() and 0xFFFF
-      |   fun templateId(buffer: DirectBuffer, offset: Int): Int = buffer.getShort(offset + 2, BYTE_ORDER).toInt() and 0xFFFF
-      |   fun schemaId(buffer: DirectBuffer, offset: Int): Int = buffer.getShort(offset + 4, BYTE_ORDER).toInt() and 0xFFFF
-      |   fun version(buffer: DirectBuffer, offset: Int): Int = buffer.getShort(offset + 6, BYTE_ORDER).toInt() and 0xFFFF
-      |   fun header(buffer: MutableDirectBuffer, offset: Int) { buffer.putLong(offset, PACKED_HEADER, BYTE_ORDER) }
-      |
+      |${headerMethodsBlock}
       |${fieldAccessors.indent(3)}
       |
-      |   fun encodeFrom(source: $className, buffer: MutableDirectBuffer, offset: Int) {
-      |      header(buffer, offset)
-      |${encodeBody.indent(6)}
+      |   fun encodeFrom(source: $className, buffer: MutableDirectBuffer, offset: Int = 0) {
+      |${fullEncodeBody.indent(6)}
       |   }
       |
-      |   fun decodeInto(target: $className, buffer: DirectBuffer, offset: Int) {
-      |      val tid = templateId(buffer, offset)
-      |      if (tid != TEMPLATE_ID) throw IllegalStateException("Invalid TEMPLATE_ID: ${'$'}tid, expected: ${'$'}TEMPLATE_ID")
-      |${decodeBody.indent(6)}
+      |   fun decodeInto(target: $className, buffer: DirectBuffer, offset: Int = 0) {
+      |${fullDecodeBody.indent(6)}
       |   }
       |
       |   fun size(): Int = SIZE
@@ -124,7 +176,7 @@ private fun generateUnionEncodeExpr(union: Union, fieldName: String, fieldCap: S
       sb.appendLine("   is ${type.name} -> ${type.name}Codec.encodeFrom(value, buffer, offset${fieldCap}(offset))")
    }
    if (union.typeName == "Any") {
-      sb.appendLine("   else -> throw IllegalArgumentException(\"Unexpected type in union field '$fieldName': \${value::class.qualifiedName}\")")
+      sb.appendLine($$"   else -> throw IllegalArgumentException(\"Unexpected type in union field '$$fieldName': ${value::class.qualifiedName}\")")
    }
    sb.append("}")
    return sb.toString()
@@ -147,89 +199,24 @@ internal fun isSupportedCodecType(type: IR.Leaf): Boolean = when (type) {
    is Bool, is Char -> true
    is Enum -> true
    is Value -> isSupportedCodecType(type.underlyingType)
+   is Tags -> isSupportedCodecType(type.valueType)
    is Str64Value -> true
    is ByteArrayN -> true
+   is ShortArrayN -> true
+   is IntArrayN -> true
+   is LongArrayN -> true
+   is FloatArrayN -> true
+   is DoubleArrayN -> true
+   is CharArrayN -> true
    is StringN -> true
+   is ArrayN -> type.structType.fields.all { isSupportedCodecType(it.type) }
    is Struct -> type.fields.all { isSupportedCodecType(it.type) }
    is Message -> type.fields.all { isSupportedCodecType(it.type) }
    is Union -> type.allowedTypes.all { msg -> msg.fields.all { isSupportedCodecType(it.type) } }
 }
 
-// --- composite codec generation (no header, flat fields) ---
-
-internal fun generateCompositeCodecSection(struct: Struct): String {
-   val className = struct.name
-   val encodedLength = struct.encodedLength
-
-   val hasUnsupportedFields = struct.fields.any { !isSupportedCodecType(it.type) }
-   if (hasUnsupportedFields) {
-      return "// ${className}Codec skipped: contains unsupported field types"
-   }
-
-   val fieldsDecOrder = struct.fields.sortedBy { it.declarationOrder }
-   val fieldsSbeOrder = struct.fields.sortedBy { it.sbeOrder }
-
-   val relativeOffsets = fieldsDecOrder.joinToString("\n") { field ->
-      val fieldUpper = field.name.uppercase()
-      "const val RELATIVE_OFFSET_${fieldUpper}=${field.offset}"
-   }
-
-   val offsetFns = fieldsDecOrder.joinToString("\n") { field ->
-      val fieldCap = field.name.replaceFirstChar { it.uppercase() }
-      val fieldUpper = field.name.uppercase()
-      "fun offset${fieldCap}(offset: Int) = offset + RELATIVE_OFFSET_${fieldUpper}"
-   }
-
-   val fieldAccessors = fieldsDecOrder.joinToString("\n\n") { field ->
-      val fieldCap = field.name.replaceFirstChar { it.uppercase() }
-      val sbeType = sbeKotlinType(field.type)
-      "fun ${field.name}(buffer: DirectBuffer, offset: Int): $sbeType = ${
-         sbeGet(
-            field.type, "offset${fieldCap}(offset)"
-         )
-      }\n" + "fun ${field.name}(buffer: MutableDirectBuffer, offset: Int, value: $sbeType) { ${
-         sbePut(
-            field.type, "offset${fieldCap}(offset)", "value"
-         )
-      } }"
-   }
-
-   val encodeBody = fieldsSbeOrder.joinToString("\n") { field ->
-      "${field.name}(buffer, offset, ${convertToSbe(field.type, "source.${field.name}")})"
-   }
-
-   val decodeBody = fieldsSbeOrder.joinToString("\n") { field ->
-      "target.${field.name} = ${convertFromSbe(field.type, "${field.name}(buffer, offset)")}"
-   }
-
-   return """
-      |object ${className}Codec {
-      |   const val SIZE = $encodedLength
-      |
-      |${relativeOffsets.indent(3)}
-      |
-      |   val BYTE_ORDER: java.nio.ByteOrder = java.nio.ByteOrder.LITTLE_ENDIAN
-      |
-      |${offsetFns.indent(3)}
-      |
-      |${fieldAccessors.indent(3)}
-      |
-      |   fun encodeFrom(source: $className, buffer: MutableDirectBuffer, offset: Int) {
-      |${encodeBody.indent(6)}
-      |   }
-      |
-      |   fun decodeInto(target: $className, buffer: DirectBuffer, offset: Int) {
-      |${decodeBody.indent(6)}
-      |   }
-      |
-      |   fun size(): Int = SIZE
-      |}
-      |""".trimTemplate()
-}
-
 // --- raw SBE type mapping ---
 
-// returns the Kotlin type that matches the SBE primitive (what SBE encoder/decoder uses)
 private fun sbeKotlinType(type: IR.Leaf): String = when (type) {
    is Int64 -> "Long"
    is Int32 -> "Int"
@@ -241,51 +228,36 @@ private fun sbeKotlinType(type: IR.Leaf): String = when (type) {
    is Char -> "Byte"
    is Enum -> "Byte"
    is Value -> sbeKotlinType(type.underlyingType)
+   is Tags -> sbeKotlinType(type.valueType)
    is Str64Value -> "Long"
-   is ByteArrayN -> "ByteArray"
-   is StringN -> "String"
    else -> throw UnsupportedOperationException("sbeKotlinType not supported for ${type::class.simpleName}")
 }
 
-// --- raw buffer read (no conversion, same as SBE decoder) ---
-
 private fun sbeGet(type: IR.Leaf, pos: String): String = when (type) {
-   is Int64 -> "buffer.getLong($pos, BYTE_ORDER)"
-   is Int32 -> "buffer.getInt($pos, BYTE_ORDER)"
-   is Int16 -> "buffer.getShort($pos, BYTE_ORDER)"
-   is Int8, Bool, Char, is Enum -> "buffer.getByte($pos)"
-   is Float -> "buffer.getFloat($pos, BYTE_ORDER)"
-   is Double -> "buffer.getDouble($pos, BYTE_ORDER)"
+   is Int64 -> "buffer.getLong($pos)"
+   is Int32 -> "buffer.getInt($pos)"
+   is Int16 -> "buffer.getShort($pos)"
+   is Int8, is Bool, is Char, is Enum -> "buffer.getByte($pos)"
+   is Float -> "buffer.getFloat($pos)"
+   is Double -> "buffer.getDouble($pos)"
    is Value -> sbeGet(type.underlyingType, pos)
-   is Str64Value -> "buffer.getLong($pos, BYTE_ORDER)"
-   is ByteArrayN -> "ByteArray(${type.length}).also { buffer.getBytes($pos, it, 0, ${type.length}) }"
-   is StringN -> when (type.encoding) {
-      Encoding.ASCII -> "buffer.getStringWithoutLengthAscii($pos, ${type.length}).trimEnd('\\u0000')"
-      Encoding.UTF8 -> "buffer.getStringWithoutLengthUtf8($pos, ${type.length}).trimEnd('\\u0000')"
-   }
+   is Tags -> sbeGet(type.valueType, pos)
+   is Str64Value -> "buffer.getLong($pos)"
    else -> throw UnsupportedOperationException("sbeGet not supported for ${type::class.simpleName}")
 }
 
-// --- raw buffer write (no conversion, same as SBE encoder) ---
-
 private fun sbePut(type: IR.Leaf, pos: String, valueExpr: String): String = when (type) {
-   is Int64 -> "buffer.putLong($pos, $valueExpr, BYTE_ORDER)"
-   is Int32 -> "buffer.putInt($pos, $valueExpr, BYTE_ORDER)"
-   is Int16 -> "buffer.putShort($pos, $valueExpr, BYTE_ORDER)"
-   is Int8, Bool, Char, is Enum -> "buffer.putByte($pos, $valueExpr)"
-   is Float -> "buffer.putFloat($pos, $valueExpr, BYTE_ORDER)"
-   is Double -> "buffer.putDouble($pos, $valueExpr, BYTE_ORDER)"
+   is Int64 -> "buffer.putLong($pos, $valueExpr)"
+   is Int32 -> "buffer.putInt($pos, $valueExpr)"
+   is Int16 -> "buffer.putShort($pos, $valueExpr)"
+   is Int8, is Bool, is Char, is Enum -> "buffer.putByte($pos, $valueExpr)"
+   is Float -> "buffer.putFloat($pos, $valueExpr)"
+   is Double -> "buffer.putDouble($pos, $valueExpr)"
    is Value -> sbePut(type.underlyingType, pos, valueExpr)
-   is Str64Value -> "buffer.putLong($pos, $valueExpr, BYTE_ORDER)"
-   is ByteArrayN -> "buffer.putBytes($pos, $valueExpr, 0, ${type.length})"
-   is StringN -> when (type.encoding) {
-      Encoding.ASCII -> "buffer.putStringWithoutLengthAscii($pos, $valueExpr)"
-      Encoding.UTF8 -> "buffer.putStringWithoutLengthUtf8($pos, $valueExpr)"
-   }
+   is Tags -> sbePut(type.valueType, pos, valueExpr)
+   is Str64Value -> "buffer.putLong($pos, $valueExpr)"
    else -> throw UnsupportedOperationException("sbePut not supported for ${type::class.simpleName}")
 }
-
-// --- Kotlin type → SBE primitive conversion (used in encodeFrom) ---
 
 internal fun convertToSbe(type: IR.Leaf, valueExpr: String): String = when (type) {
    is Int64, is Int32, is Int16, is Int8, is Float, is Double -> valueExpr
@@ -293,13 +265,19 @@ internal fun convertToSbe(type: IR.Leaf, valueExpr: String): String = when (type
    is Char -> "$valueExpr.code.toByte()"
    is Enum -> "$valueExpr.ordinal.toUByte().toByte()"
    is Value -> convertToSbe(type.underlyingType, "$valueExpr.${type.innerName}")
+   is Tags -> convertToSbe(type.valueType, valueExpr)
    is Str64Value -> "$valueExpr.value"
    is ByteArrayN -> valueExpr
+   is ShortArrayN -> valueExpr
+   is IntArrayN -> valueExpr
+   is LongArrayN -> valueExpr
+   is FloatArrayN -> valueExpr
+   is DoubleArrayN -> valueExpr
+   is CharArrayN -> valueExpr
    is StringN -> valueExpr
+   is ArrayN -> valueExpr
    else -> throw UnsupportedOperationException("convertToSbe not supported for ${type::class.simpleName}")
 }
-
-// --- SBE primitive → Kotlin type conversion (used in decodeInto) ---
 
 internal fun convertFromSbe(type: IR.Leaf, valueExpr: String): String = when (type) {
    is Int64, is Int32, is Int16, is Int8, is Float, is Double -> valueExpr
@@ -307,8 +285,16 @@ internal fun convertFromSbe(type: IR.Leaf, valueExpr: String): String = when (ty
    is Char -> "$valueExpr.toInt().toChar()"
    is Enum -> "${type.name}.entries[$valueExpr.toUByte().toInt()]"
    is Value -> "${type.name}(${convertFromSbe(type.underlyingType, valueExpr)})"
+   is Tags -> convertFromSbe(type.valueType, valueExpr)
    is Str64Value -> "${type.name}($valueExpr)"
    is ByteArrayN -> valueExpr
+   is ShortArrayN -> valueExpr
+   is IntArrayN -> valueExpr
+   is LongArrayN -> valueExpr
+   is FloatArrayN -> valueExpr
+   is DoubleArrayN -> valueExpr
+   is CharArrayN -> valueExpr
    is StringN -> valueExpr
+   is ArrayN -> valueExpr
    else -> throw UnsupportedOperationException("convertFromSbe not supported for ${type::class.simpleName}")
 }
