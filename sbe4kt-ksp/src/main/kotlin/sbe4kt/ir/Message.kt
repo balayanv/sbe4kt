@@ -149,6 +149,7 @@ internal data class Message(
       fields.forEach { field ->
          when (val type = field.type) {
             is Struct -> type.declaration.containingFile?.let { dependentFiles.add(it) }
+            is ArrayN -> type.structType.declaration.containingFile?.let { dependentFiles.add(it) }
             is Message -> type.declaration.containingFile?.let { dependentFiles.add(it) }
             else -> {} // Primitive types don't have source files
          }
@@ -166,10 +167,20 @@ internal data class Message(
          "char" -> 1
          else -> {
             val byteArrayMatch = Regex("ByteArray(\\d+)").matchEntire(sbeType)
-            val charArrayMatch = Regex("CharArray(\\d+)U?").matchEntire(sbeType)
+            val charArrayMatch = Regex("CharArray(\\d+)").matchEntire(sbeType)
+            val shortArrayMatch = Regex("ShortArray(\\d+)").matchEntire(sbeType)
+            val intArrayMatch = Regex("IntArray(\\d+)").matchEntire(sbeType)
+            val longArrayMatch = Regex("LongArray(\\d+)").matchEntire(sbeType)
+            val floatArrayMatch = Regex("FloatArray(\\d+)").matchEntire(sbeType)
+            val doubleArrayMatch = Regex("DoubleArray(\\d+)").matchEntire(sbeType)
             when {
                byteArrayMatch != null -> byteArrayMatch.groupValues[1].toInt()
                charArrayMatch != null -> charArrayMatch.groupValues[1].toInt()
+               shortArrayMatch != null -> shortArrayMatch.groupValues[1].toInt() * 2
+               intArrayMatch != null -> intArrayMatch.groupValues[1].toInt() * 4
+               longArrayMatch != null -> longArrayMatch.groupValues[1].toInt() * 8
+               floatArrayMatch != null -> floatArrayMatch.groupValues[1].toInt() * 4
+               doubleArrayMatch != null -> doubleArrayMatch.groupValues[1].toInt() * 8
                else -> 8
             }
          }
@@ -183,6 +194,7 @@ internal data class Message(
       imports.add("org.agrona.DirectBuffer")
       imports.add("org.agrona.MutableDirectBuffer")
       imports.add("org.agrona.concurrent.UnsafeBuffer")
+      imports.add("java.nio.ByteBuffer")
       imports.add("sbe4kt.lib.CSV")
       imports.add(declaration.importName())
       fields.onEach { imports.addAll(it.type.imports) }

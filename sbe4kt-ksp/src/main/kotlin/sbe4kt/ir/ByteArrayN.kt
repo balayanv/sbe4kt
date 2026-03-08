@@ -11,5 +11,5 @@ internal data class ByteArrayN(val length: Int) : IR.Leaf {
    override val randomValue = "ByteArray($length) { Random.nextInt().toByte() }"
    override val size = length
    override val packageStr = ""
-   override val imports = setOf("kotlin.random.Random")
+   override val imports = setOf("kotlin.random.Random", "sbe4kt.lib.ByteArrayCodec", "sbe4kt.lib.ByteArrayFW")
 }

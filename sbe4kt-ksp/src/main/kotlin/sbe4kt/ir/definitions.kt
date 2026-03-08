@@ -45,7 +45,12 @@ internal data class Schema(
    val messages: ArrayList<Message> = ArrayList()
    val deprecatedMessages: ArrayList<PrevMessage> = ArrayList()
    val byteArraySizes = HashSet<Int>()
-   val fixedStrings = HashSet<StringN>()
+   val shortArraySizes = HashSet<Int>()
+   val intArraySizes = HashSet<Int>()
+   val longArraySizes = HashSet<Int>()
+   val floatArraySizes = HashSet<Int>()
+   val doubleArraySizes = HashSet<Int>()
+   val charArraySizes = HashSet<Int>()
    var evolution: SchemaEvolution? = null
 
    val ids = HashSet<Int>()
@@ -114,8 +119,16 @@ internal data class Schema(
    private fun extractSpecialTypes(type: IR.Leaf) {
       when (type) {
          is ByteArrayN -> byteArraySizes.add(type.length)
-         is StringN -> fixedStrings.add(type)
+         is ShortArrayN -> shortArraySizes.add(type.length)
+         is IntArrayN -> intArraySizes.add(type.length)
+         is LongArrayN -> longArraySizes.add(type.length)
+         is FloatArrayN -> floatArraySizes.add(type.length)
+         is DoubleArrayN -> doubleArraySizes.add(type.length)
+         is CharArrayN -> charArraySizes.add(type.length)
+         is StringN -> charArraySizes.add(type.length)
          is Value -> extractSpecialTypes(type.underlyingType)
+         is Tags -> extractSpecialTypes(type.valueType)
+         is ArrayN -> byteArraySizes.add(type.size)
          is Message -> byteArraySizes.add(type.size) // Nested messages use ByteArrayN
          is Union -> {
             byteArraySizes.add(type.maxSize)
@@ -139,7 +152,6 @@ internal data class Field(
    val name: String = prop.simpleName.asString().requireNotReserveWord()
    val type: IR.Leaf = prop.toLeaf()
    val isNullable: Boolean = prop.type.resolve().isMarkedNullable
-   val tags: List<String> = prop.metaAnnotation().tags()
    val removeAfter: Int = prop.metaAnnotation().removeAfter()
 
    var id: Int = -1
@@ -190,11 +202,47 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
          require(size > 0) { "ByteArray size must be positive, got $size" }
          return ByteArrayN(size)
       }
-      if (declaration.qualifiedName() == "kotlin.String") {
-         require(size > 0) { "String size must be positive, got $size" }
-         val encoding = meta.encoding()
-         return StringN(size, encoding)
+      if (declaration.qualifiedName() == "kotlin.ShortArray") {
+         require(size > 0) { "ShortArray size must be positive, got $size" }
+         return ShortArrayN(size)
       }
+      if (declaration.qualifiedName() == "kotlin.IntArray") {
+         require(size > 0) { "IntArray size must be positive, got $size" }
+         return IntArrayN(size)
+      }
+      if (declaration.qualifiedName() == "kotlin.LongArray") {
+         require(size > 0) { "LongArray size must be positive, got $size" }
+         return LongArrayN(size)
+      }
+      if (declaration.qualifiedName() == "kotlin.FloatArray") {
+         require(size > 0) { "FloatArray size must be positive, got $size" }
+         return FloatArrayN(size)
+      }
+      if (declaration.qualifiedName() == "kotlin.DoubleArray") {
+         require(size > 0) { "DoubleArray size must be positive, got $size" }
+         return DoubleArrayN(size)
+      }
+      if (declaration.qualifiedName() == "kotlin.CharArray") {
+         require(size > 0) { "CharArray size must be positive, got $size" }
+         return CharArrayN(size)
+      }
+      if (declaration.qualifiedName() == "kotlin.String" || declaration.qualifiedName() == "kotlin.CharSequence") {
+         require(size > 0) { "String size must be positive, got $size" }
+         return StringN(size)
+      }
+      if (declaration.qualifiedName() == "kotlin.Array") {
+         val typeArg = resolvedType.arguments.first().type!!.resolve().declaration
+         val elementType = recursiveResolveLeaf(typeArg)
+         require(elementType is Struct) { "Array<T> with @META(size) only supports struct types" }
+         return ArrayN(size, elementType)
+      }
+   }
+
+   val tags = meta.tags()
+   if (tags.isNotEmpty()) {
+      val resolved = recursiveResolveLeaf(declaration)
+      require(resolved is Value) { "tags field must be a value class, got ${resolved::class.simpleName}" }
+      return Tags(resolved, tags)
    }
 
    return recursiveResolveLeaf(declaration)
