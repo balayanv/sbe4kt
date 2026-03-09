@@ -14,8 +14,6 @@
          <type name='version' primitiveType='uint16'/>
       </composite>
 
-      <type name='ByteArray24' primitiveType='uint8' length='24'/>
-
       <composite name='Payload'>
          <type name='x' primitiveType='int32'/>
          <type name='y' primitiveType='int32'/>
@@ -24,8 +22,8 @@
    </types>
 
    <sbe:message name='Msg' id='1' description='sbe4kt generated sbe schema for Msg'>
-      <field name='data' id='2' type='ByteArray24'/>
       <field name='id' id='1' type='int64'/>
+      <field name='payload' id='2' type='Payload'/>
    </sbe:message>
    
 

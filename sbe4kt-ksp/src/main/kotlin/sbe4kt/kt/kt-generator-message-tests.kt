@@ -47,7 +47,7 @@ internal fun generateTestsSection(message: Message): String {
       |$assertHelper
       |   @Test
       |   fun testFlyweightRoundTrip() {
-      |      val fw = ${className}FW().init()
+      |      val fw = ${className}FW()
       |      repeat(100) {
       |         val original = random$className()
       |         fw.encodeFrom(original)
@@ -65,24 +65,26 @@ internal fun generateTestsSection(message: Message): String {
       |      val s2sBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
       |      val c2sBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
       |      val s2cBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
-      |      val fw = ${className}FW()
+      |      val c2cFw = ${className}FW(c2cBuffer)
+      |      val c2sFw = ${className}FW(c2sBuffer)
+      |      val s2cFw = ${className}FW(s2cBuffer)
       |
       |      repeat(100) {
       |         val original = random$className()
       |         val c2c = new$className()
-      |         fw.wrap(c2cBuffer).encodeFrom(original).decodeInto(c2c)
+      |         c2cFw.encodeFrom(original).decodeInto(c2c)
       |
       |         val s2s = new$className()
       |         encode${className}SBE(original, s2sBuffer, 0)
       |         decode${className}SBE(s2s, s2sBuffer, 0)
       |
       |         val c2s = new$className()
-      |         fw.wrap(c2sBuffer).encodeFrom(original)
+      |         c2sFw.encodeFrom(original)
       |         decode${className}SBE(c2s, c2sBuffer, 0)
       |
       |         val s2c = new$className()
       |         encode${className}SBE(original, s2cBuffer, 0)
-      |         fw.wrap(s2cBuffer).decodeInto(s2c)
+      |         s2cFw.decodeInto(s2c)
       |
       |         assertEquals(c2cBuffer, s2sBuffer)
       |         assertEquals(s2sBuffer, c2sBuffer)

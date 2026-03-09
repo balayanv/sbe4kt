@@ -27,73 +27,51 @@ internal fun generateFlyweightsSection(message: Message): String {
 
    val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
 
-   // pre-allocated FWs for composite, nested message, and union variant fields
-   val nestedRwFields = mutableListOf<String>()
-   val nestedWraps = mutableListOf<String>()
+   // nested FW fields initialized with shared buffer and computed offset
+   val nestedFwFields = mutableListOf<String>()
 
    for (field in fieldsDecOrder) {
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
-      val fieldUpper = field.name.uppercase()
       when (field.type) {
          is Struct, is sbe4kt.ir.Message -> {
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = ${field.type.name}FW()")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${field.type.name}Codec.size())")
+            nestedFwFields.add("private val ${field.name}FW = ${field.type.name}FW(buffer, $codecName.offset${fieldCap}(offset))")
          }
          is ByteArrayN -> {
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = ByteArrayFW(${field.type.length})")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${field.type.size})")
+            nestedFwFields.add("private val ${field.name}FW = ByteArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is ShortArrayN -> {
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = ShortArrayFW(${field.type.length})")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${field.type.size})")
+            nestedFwFields.add("private val ${field.name}FW = ShortArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is IntArrayN -> {
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = IntArrayFW(${field.type.length})")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${field.type.size})")
+            nestedFwFields.add("private val ${field.name}FW = IntArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is LongArrayN -> {
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = LongArrayFW(${field.type.length})")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${field.type.size})")
+            nestedFwFields.add("private val ${field.name}FW = LongArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is FloatArrayN -> {
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = FloatArrayFW(${field.type.length})")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${field.type.size})")
+            nestedFwFields.add("private val ${field.name}FW = FloatArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is DoubleArrayN -> {
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = DoubleArrayFW(${field.type.length})")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${field.type.size})")
+            nestedFwFields.add("private val ${field.name}FW = DoubleArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is CharArrayN -> {
-            val charArr = field.type as CharArrayN
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = CharArrayFW(${charArr.length})")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${charArr.size})")
+            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${(field.type as CharArrayN).length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is StringN -> {
-            val strN = field.type as StringN
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = CharArrayFW(${strN.length})")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${strN.size})")
+            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${(field.type as StringN).length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is ArrayN -> {
             val structArr = field.type as ArrayN
-            val rwVar = "${field.name}FW"
-            nestedRwFields.add("private val $rwVar = run { val elementFW = ${structArr.structType.name}FW(); ArrayFW<${structArr.structType.name}FW>(${structArr.length}, ${structArr.structType.name}Codec.SIZE) { buf, off, len -> elementFW.wrap(buf, off, len) } }")
-            nestedWraps.add("$rwVar.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${structArr.length} * ${structArr.structType.name}Codec.SIZE)")
+            val structName = structArr.structType.name
+            val elementVar = "${field.name}ElementFW"
+            nestedFwFields.add("private val $elementVar = ${structName}FW(buffer, 0)")
+            nestedFwFields.add("private val ${field.name}FW = ArrayFW<${structName}FW>(${structArr.length}, ${structName}Codec.SIZE, { _, off, _ -> $elementVar.also { it.offset = off } }, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is Union -> {
             val union = field.type as Union
             for (variant in union.allowedTypes) {
                val variantLower = variant.name.replaceFirstChar { it.lowercase() }
-               nestedRwFields.add("private val ${variantLower}FW = ${variant.name}FW()")
-               nestedWraps.add("${variantLower}FW.wrap(buffer, $codecName.RELATIVE_OFFSET_${fieldUpper}, ${variant.name}Codec.size())")
+               nestedFwFields.add("private val ${variantLower}FW = ${variant.name}FW(buffer, $codecName.offset${fieldCap}(offset))")
             }
          }
          else -> {}
@@ -110,14 +88,14 @@ internal fun generateFlyweightsSection(message: Message): String {
          is Union -> {
             val union = field.type as Union
             val lines = mutableListOf<String>()
-            lines.add("fun ${field.name}Id(): Int = $codecName.templateId(buffer, $codecName.offset${fieldCap}())")
+            lines.add("fun ${field.name}Id(): Int = $codecName.templateId(buffer, $codecName.offset${fieldCap}(offset))")
             for (variant in union.allowedTypes) {
                val variantLower = variant.name.replaceFirstChar { it.lowercase() }
                val variantCap = variant.name.replaceFirstChar { it.uppercase() }
                lines.add("fun ${field.name}${variantCap}() = ${variantLower}FW")
             }
             val whenBranches = union.allowedTypes.joinToString("\n") { variant ->
-               "   is ${variant.name} -> ${variant.name}Codec.encodeFrom(value, buffer, $codecName.offset${fieldCap}())"
+               "   is ${variant.name} -> ${variant.name}Codec.encodeFrom(value, buffer, $codecName.offset${fieldCap}(offset))"
             }
             val elseClause = if (union.typeName == "Any") {
                "\n   else -> throw IllegalArgumentException(\"Unexpected type in union field '${field.name}': \${value::class.qualifiedName}\")"
@@ -161,54 +139,37 @@ internal fun generateFlyweightsSection(message: Message): String {
             field.type.generateFlyweightAccessors(field.name, codecName)
          }
          else -> {
-            val rawExpr = "$codecName.${field.name}(buffer)"
+            val rawExpr = "$codecName.${field.name}(buffer, offset)"
             val converted = convertFromSbe(field.type, rawExpr)
             val convertedSet = convertToSbe(field.type, field.name)
             "fun ${field.name}() = $converted\n" +
-            "fun ${field.name}(${field.name}: ${field.type.name}) = apply { $codecName.${field.name}(buffer, 0, $convertedSet) }"
+            "fun ${field.name}(${field.name}: ${field.type.name}) = apply { $codecName.${field.name}(buffer, offset, $convertedSet) }"
          }
       }
    }
 
-   val nestedRwSection = if (nestedRwFields.isEmpty()) "" else nestedRwFields.joinToString("\n").indent(3) + "\n"
-
-   val wrapSuffix = if (nestedWraps.isEmpty()) "" else "; wrapNested()"
-   val wrapNestedSection = if (nestedWraps.isEmpty()) "" else {
-      "\n" + ("private fun wrapNested() {\n" + nestedWraps.joinToString("\n").indent(3) + "\n}").indent(3) + "\n"
-   }
-
-   val wrapMethods = listOf(
-      "fun init() = wrap(ByteArray($codecName.SIZE))",
-      "fun wrap(buffer: ByteArray) = apply { this.buffer.wrap(buffer)$wrapSuffix }",
-      "fun wrap(buffer: ByteArray, offset: Int, length: Int) = apply { this.buffer.wrap(buffer, offset, length)$wrapSuffix }",
-      "fun wrap(buffer: ByteBuffer) = apply { this.buffer.wrap(buffer)$wrapSuffix }",
-      "fun wrap(buffer: ByteBuffer, offset: Int, length: Int) = apply { this.buffer.wrap(buffer, offset, length)$wrapSuffix }",
-      "fun wrap(buffer: DirectBuffer) = apply { this.buffer.wrap(buffer)$wrapSuffix }",
-      "fun wrap(buffer: DirectBuffer, offset: Int) = apply { this.buffer.wrap(buffer, offset, $codecName.size())$wrapSuffix }",
-      "fun wrap(buffer: DirectBuffer, offset: Int, length: Int) = apply { this.buffer.wrap(buffer, offset, length)$wrapSuffix }",
-      "fun wrap(address: Long, length: Int) = apply { this.buffer.wrap(address, length)$wrapSuffix }",
-   ).joinToString("\n")
+   val nestedFwSection = if (nestedFwFields.isEmpty()) "" else nestedFwFields.joinToString("\n").indent(3) + "\n"
 
    return """
-      |class ${className}FW {
-      |   private val buffer = UnsafeBuffer()
-      |${nestedRwSection}
-      |   fun header() = apply { $codecName.header(buffer) }
-      |   fun blockLength() = $codecName.blockLength(buffer)
-      |   fun templateId() = $codecName.templateId(buffer)
-      |   fun schemaId() = $codecName.schemaId(buffer)
-      |   fun version() = $codecName.version(buffer)
+      |class ${className}FW(
+      |   val buffer: UnsafeBuffer = UnsafeBuffer(ByteArray($codecName.SIZE)),
+      |   var offset: Int = 0,
+      |) {
+      |${nestedFwSection}
+      |   fun header() = apply { $codecName.header(buffer, offset) }
+      |   fun blockLength() = $codecName.blockLength(buffer, offset)
+      |   fun templateId() = $codecName.templateId(buffer, offset)
+      |   fun schemaId() = $codecName.schemaId(buffer, offset)
+      |   fun version() = $codecName.version(buffer, offset)
       |
-      |${wrapMethods.indent(3)}
-      |${wrapNestedSection}
       |${fwAccessors.indent(3)}
       |
       |   fun encodeFrom(source: $className) = apply {
-      |      $codecName.encodeFrom(source, buffer)
+      |      $codecName.encodeFrom(source, buffer, offset)
       |   }
       |
       |   fun decodeInto(target: $className) = apply {
-      |      $codecName.decodeInto(target, buffer)
+      |      $codecName.decodeInto(target, buffer, offset)
       |   }
       |}
       |""".trimTemplate()
@@ -228,39 +189,26 @@ internal fun generateCompositeFWSection(struct: Struct): String {
    val fieldsDecOrder = struct.fields.sortedBy { it.declarationOrder }
 
    val fwAccessors = fieldsDecOrder.joinToString("\n") { field ->
-      val rawExpr = "$codecName.${field.name}(buffer)"
+      val rawExpr = "$codecName.${field.name}(buffer, offset)"
       val converted = convertFromSbe(field.type, rawExpr)
       val convertedSet = convertToSbe(field.type, field.name)
       "fun ${field.name}() = $converted\n" +
-      "fun ${field.name}(${field.name}: ${field.type.name}) = apply { $codecName.${field.name}(buffer, 0, $convertedSet) }"
+      "fun ${field.name}(${field.name}: ${field.type.name}) = apply { $codecName.${field.name}(buffer, offset, $convertedSet) }"
    }
 
-   val wrapMethods = listOf(
-      "fun init() = wrap(ByteArray($codecName.SIZE))",
-      "fun wrap(buffer: ByteArray) = apply { this.buffer.wrap(buffer) }",
-      "fun wrap(buffer: ByteArray, offset: Int, length: Int) = apply { this.buffer.wrap(buffer, offset, length) }",
-      "fun wrap(buffer: ByteBuffer) = apply { this.buffer.wrap(buffer) }",
-      "fun wrap(buffer: ByteBuffer, offset: Int, length: Int) = apply { this.buffer.wrap(buffer, offset, length) }",
-      "fun wrap(buffer: DirectBuffer) = apply { this.buffer.wrap(buffer) }",
-      "fun wrap(buffer: DirectBuffer, offset: Int) = apply { this.buffer.wrap(buffer, offset, $codecName.size()) }",
-      "fun wrap(buffer: DirectBuffer, offset: Int, length: Int) = apply { this.buffer.wrap(buffer, offset, length) }",
-      "fun wrap(address: Long, length: Int) = apply { this.buffer.wrap(address, length) }",
-   ).joinToString("\n")
-
    return """
-      |class ${className}FW {
-      |   private val buffer = UnsafeBuffer()
-      |
-      |${wrapMethods.indent(3)}
-      |
+      |class ${className}FW(
+      |   val buffer: UnsafeBuffer = UnsafeBuffer(ByteArray($codecName.SIZE)),
+      |   var offset: Int = 0,
+      |) {
       |${fwAccessors.indent(3)}
       |
       |   fun encodeFrom(source: $className) = apply {
-      |      $codecName.encodeFrom(source, buffer)
+      |      $codecName.encodeFrom(source, buffer, offset)
       |   }
       |
       |   fun decodeInto(target: $className) = apply {
-      |      $codecName.decodeInto(target, buffer)
+      |      $codecName.decodeInto(target, buffer, offset)
       |   }
       |}
       |""".trimTemplate()

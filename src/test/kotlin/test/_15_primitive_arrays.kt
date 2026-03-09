@@ -53,7 +53,7 @@ class PrimitiveArrayTest {
 
    @Test
    fun flyweightElementAccess() {
-      val fw = AllArraysMsgFW().init().header()
+      val fw = AllArraysMsgFW().header()
 
       for (i in 0 until 8) fw.bytes().set(i, (i * 3).toByte())
       for (i in 0 until 6) fw.shorts().set(i, (i * 7).toShort())
@@ -74,7 +74,7 @@ class PrimitiveArrayTest {
 
    @Test
    fun flyweightBulkAccess() {
-      val fw = AllArraysMsgFW().init().header()
+      val fw = AllArraysMsgFW().header()
 
       val bytes = ByteArray(8) { (it + 10).toByte() }
       val shorts = ShortArray(6) { (it + 20).toShort() }
@@ -111,7 +111,7 @@ class PrimitiveArrayTest {
 
    @Test
    fun flyweightRoundTrip() {
-      val fw = AllArraysMsgFW().init()
+      val fw = AllArraysMsgFW()
       val original = AllArraysMsg(
          bytes = ByteArray(8) { (it * 5).toByte() },
          shorts = ShortArray(6) { (it * 50).toShort() },
@@ -137,7 +137,7 @@ class PrimitiveArrayTest {
 
    @Test
    fun charArrayFWIsCharSequence() {
-      val fw = AllArraysMsgFW().init().header()
+      val fw = AllArraysMsgFW().header()
       fw.chars().encodeFromCharSequence("HelloWorld")
       assertEquals("HelloWorld", fw.chars().toString())
       assertEquals(10, fw.chars().length)
@@ -146,7 +146,7 @@ class PrimitiveArrayTest {
 
    @Test
    fun charArrayFWPartialEncode() {
-      val fw = AllArraysMsgFW().init().header()
+      val fw = AllArraysMsgFW().header()
       fw.chars().encodeFromCharSequence("hello world", 6, 11)
       assertEquals("world", fw.chars().toString())
    }

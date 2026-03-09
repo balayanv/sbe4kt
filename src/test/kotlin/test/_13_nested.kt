@@ -50,7 +50,7 @@ class NestedMessageTest {
    @Test
    fun flyweightNestedMessageAccess() {
       val buffer = UnsafeBuffer(ByteArray(Signal2Codec.SIZE))
-      val fw = Signal2FW().wrap(buffer)
+      val fw = Signal2FW(buffer)
 
       fw.direction(Direction2.BUY)
       fw.xy()

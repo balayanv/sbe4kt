@@ -32,7 +32,8 @@ class CompositeTest {
    @Test
    fun flyweightCompositeAccess() {
       val buffer = UnsafeBuffer(ByteArray(1024))
-      val fw = Signal1FW().wrap(buffer, 100)
+      val fw = Signal1FW()
+      fw.buffer.wrap(buffer, 100, Signal1Codec.SIZE)
 
       fw.f1(Direction1.SELL)
       fw.f2()

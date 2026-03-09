@@ -86,7 +86,7 @@ class UnionTypesTest {
    @Test
    fun flyweightReadWriteSuccess() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fw = Wrapper1FW().wrap(buffer)
+      val fw = Wrapper1FW(buffer)
 
       val wrapperId = TimeId(Nanos(5000000000L))
       val successId = TimeId(Nanos(6000000000L))
@@ -105,7 +105,7 @@ class UnionTypesTest {
    @Test
    fun flyweightReadWriteFailure() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fw = Wrapper1FW().wrap(buffer)
+      val fw = Wrapper1FW(buffer)
 
       val wrapperId = TimeId(Nanos(7000000000L))
       val failureId = TimeId(Nanos(8000000000L))
@@ -124,7 +124,7 @@ class UnionTypesTest {
    @Test
    fun flyweightEncodeFromAndDecodeInto() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fw = Wrapper1FW().wrap(buffer)
+      val fw = Wrapper1FW(buffer)
 
       val original = Wrapper1(
          id = TimeId(Nanos(9000000000L)),
@@ -151,7 +151,7 @@ class UnionTypesTest {
       )
       Wrapper1Codec.encodeFrom(wrapper, buffer, 0)
 
-      val fwR = Wrapper1FW().wrap(buffer)
+      val fwR = Wrapper1FW(buffer)
       assertEquals(TimeId(Nanos(11000000000L)), fwR.id())
 
       assertEquals(Failure1Codec.TEMPLATE_ID, fwR.payloadId())
@@ -162,7 +162,7 @@ class UnionTypesTest {
    @Test
    fun writeOnlyFlyweight() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fwW = Wrapper1FW().wrap(buffer)
+      val fwW = Wrapper1FW(buffer)
 
       fwW.header()
       fwW.id(TimeId(Nanos(13000000000L)))
@@ -179,7 +179,7 @@ class UnionTypesTest {
    @Test
    fun switchingUnionTypes() {
       val buffer = UnsafeBuffer(ByteArray(Wrapper1Codec.SIZE))
-      val fw = Wrapper1FW().wrap(buffer)
+      val fw = Wrapper1FW(buffer)
 
       fw.id(TimeId(Nanos(15000000000L)))
       fw.payload(Success1(timestamp = TimeId.now(), value = 100L))
@@ -230,7 +230,7 @@ class UnionTypesTest {
 
    @Test
    fun sealedInterfaceFlyweight() {
-      val fw = Wrapper2FW().wrap(ByteArray(Wrapper2Codec.SIZE))
+      val fw = Wrapper2FW()
 
       fw.id(TimeId(Nanos(5000000000L)))
       fw.payload(Service1Message.Success2(timestamp = TimeId(Nanos(6000000000L)), value = 999L))

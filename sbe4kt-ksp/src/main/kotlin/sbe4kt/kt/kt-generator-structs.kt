@@ -52,8 +52,6 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |import org.agrona.DirectBuffer
       |import org.agrona.MutableDirectBuffer
       |import org.agrona.concurrent.UnsafeBuffer
-      |import java.nio.ByteBuffer
-      |import java.nio.ByteOrder
       |
       |fun new${struct.name}(): ${struct.name} {
       |   return ${struct.name}($defaultArgs)

@@ -26,10 +26,10 @@ internal data class Tags(
    override fun convertFromSbe(value: String) = valueType.convertFromSbe(value)
 
    fun generateFlyweightAccessors(fieldName: String, codecName: String): String {
-      val rawExpr = "$codecName.$fieldName(buffer)"
+      val rawExpr = "$codecName.$fieldName(buffer, offset)"
       val lines = mutableListOf<String>()
       lines.add("fun $fieldName() = ${convertFromSbe(rawExpr)}")
-      lines.add("fun $fieldName($fieldName: $name) = apply { $codecName.$fieldName(buffer, 0, ${convertToSbe(fieldName)}) }")
+      lines.add("fun $fieldName($fieldName: $name) = apply { $codecName.$fieldName(buffer, offset, ${convertToSbe(fieldName)}) }")
 
       for ((i, tag) in milestones.withIndex()) {
          val slot = i + 1

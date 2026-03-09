@@ -8,8 +8,7 @@ import sbe4kt.lib.TimeId
 @SBE
 data class Msg(
    var id: TimeId,
-   @META(size = 3)
-   var data : Array<Payload>,
+   var payload: Payload
 )
 
 @SBE(isStruct = true)
@@ -27,12 +26,12 @@ fun main() {
    val source = randomMsg()
    val target = newMsg()
 
-   val fw = MsgFW().init()
-   fw.init().encodeFrom(source)
+   val fw = MsgFW()
+   fw.encodeFrom(source)
 
 
 
-   fw.data()[0]
+//   fw.data()[0]
 //      .set(0, 'A').set(1, 'B').set(2, 'C').set(3, 0)
 //      .encodeFromCharSequence("ABC")
 
@@ -41,5 +40,5 @@ fun main() {
    println(target)
    target.printSbeLayout()
 
-   target.data[0].printSbeLayout()
+   target.payload.printSbeLayout()
 }

@@ -8,7 +8,7 @@ import org.agrona.concurrent.UnsafeBuffer;
 public class Example {
 
     static void main(String[] args) {
-        var fw = new MsgFW().wrap(new byte[MsgCodec.SIZE]);
+        var fw = new MsgFW();
 
         for (int i = 0; i < 100; i++) {
             var random = MsgExtensionsKt.randomMsg();
