@@ -3,12 +3,15 @@ package example
 import sbe4kt.META
 import sbe4kt.SBE
 import sbe4kt.lib.TimeId
+import java.util.Objects
 
 
 @SBE
 data class Msg(
    var id: TimeId,
    var payload: Payload
+//   @META(size = 8)
+//   var arr : IntArray
 )
 
 @SBE(isStruct = true)
@@ -40,5 +43,5 @@ fun main() {
    println(target)
    target.printSbeLayout(verbose = true)
 
-   target.payload.printSbeLayout()
+   println(fw.toString())
 }

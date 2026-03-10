@@ -29,36 +29,46 @@ internal fun generateFlyweightsSection(message: Message): String {
 
    // nested FW fields initialized with shared buffer and computed offset
    val nestedFwFields = mutableListOf<String>()
+   val nestedFwVarNames = mutableListOf<String>()
 
    for (field in fieldsDecOrder) {
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
          is Struct, is Message -> {
             nestedFwFields.add("private val ${field.name}FW = ${field.type.name}FW(buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is ByteArrayN -> {
             nestedFwFields.add("private val ${field.name}FW = ByteArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is ShortArrayN -> {
             nestedFwFields.add("private val ${field.name}FW = ShortArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is IntArrayN -> {
             nestedFwFields.add("private val ${field.name}FW = IntArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is LongArrayN -> {
             nestedFwFields.add("private val ${field.name}FW = LongArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is FloatArrayN -> {
             nestedFwFields.add("private val ${field.name}FW = FloatArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is DoubleArrayN -> {
             nestedFwFields.add("private val ${field.name}FW = DoubleArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is CharArrayN -> {
             nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is StringN -> {
             nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is ArrayN -> {
             val structArr = field.type
@@ -66,12 +76,14 @@ internal fun generateFlyweightsSection(message: Message): String {
             val elementVar = "${field.name}ElementFW"
             nestedFwFields.add("private val $elementVar = ${structName}FW(buffer, 0)")
             nestedFwFields.add("private val ${field.name}FW = ArrayFW<${structName}FW>(${structArr.length}, ${structName}Codec.SIZE, { _, off, _ -> $elementVar.also { it.offset = off } }, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW")
          }
          is Union -> {
             val union = field.type
             for (variant in union.allowedTypes) {
                val variantLower = variant.name.replaceFirstChar { it.lowercase() }
                nestedFwFields.add("private val ${variantLower}FW = ${variant.name}FW(buffer, $codecName.offset${fieldCap}(offset))")
+               nestedFwVarNames.add("${variantLower}FW")
             }
          }
          else -> {}
@@ -150,6 +162,8 @@ internal fun generateFlyweightsSection(message: Message): String {
 
    val nestedFwSection = if (nestedFwFields.isEmpty()) "" else nestedFwFields.joinToString("\n").indent(3) + "\n"
 
+   val toStringMethod = generateFwToString("${className}FW", nestedFwVarNames)
+
    return """
       |class ${className}FW(
       |   val buffer: UnsafeBuffer = UnsafeBuffer(ByteArray($codecName.SIZE)),
@@ -171,6 +185,8 @@ internal fun generateFlyweightsSection(message: Message): String {
       |   fun decodeInto(target: $className) = apply {
       |      $codecName.decodeInto(target, buffer, offset)
       |   }
+      |
+      |${toStringMethod.indent(3)}
       |}
       |""".trimTemplate()
 }
@@ -196,6 +212,8 @@ internal fun generateCompositeFWSection(struct: Struct): String {
       "fun ${field.name}(${field.name}: ${field.type.name}) = apply { $codecName.${field.name}(buffer, offset, $convertedSet) }"
    }
 
+   val toStringMethod = generateFwToString("${className}FW", emptyList())
+
    return """
       |class ${className}FW(
       |   val buffer: UnsafeBuffer = UnsafeBuffer(ByteArray($codecName.SIZE)),
@@ -210,6 +228,25 @@ internal fun generateCompositeFWSection(struct: Struct): String {
       |   fun decodeInto(target: $className) = apply {
       |      $codecName.decodeInto(target, buffer, offset)
       |   }
+      |
+      |${toStringMethod.indent(3)}
       |}
       |""".trimTemplate()
+}
+
+private fun generateFwToString(fwClassName: String, nestedVarNames: List<String>): String {
+   val sb = StringBuilder()
+   sb.appendLine("override fun toString(): String = \"\"\"")
+   sb.appendLine("   $fwClassName {")
+   sb.appendLine($$"      buffer -> UnsafeBuffer@${System.identityHashCode(buffer)}[${buffer.capacity()}]")
+   sb.appendLine($$"      offset: $offset")
+   for (varName in nestedVarNames) {
+      sb.appendLine("      $varName {")
+      sb.appendLine($$"         buffer -> UnsafeBuffer@${System.identityHashCode($$varName.buffer)}[${$$varName.buffer.capacity()}]")
+      sb.appendLine($$"         offset: ${$$varName.offset}")
+      sb.appendLine("      }")
+   }
+   sb.appendLine("   }")
+   sb.append("\"\"\".trimIndent()")
+   return sb.toString()
 }

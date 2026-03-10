@@ -30,14 +30,14 @@ internal fun generateUtilsSection(message: Message): String {
       |}
       |
       |fun $$className.printSbeLayout(verbose: Boolean = false) {
-      |   var rows = this.sbeLayout().rows
-      |
+      |   val csv = this.sbeLayout()
       |   if (verbose) {
-      |      rows = rows.filterNot { it.metadata.startsWith("info") }.toMutableList()
-      |      CSV(rows).print()
+      |      csv.print()
       |   } else {
-      |      rows = rows.filterNot { it.metadata.startsWith("optional") }.toMutableList()
-      |      CSV(rows).print()
+      |      val optionalRowsRemoved = csv.rows
+      |         .filterNot { it.metadata.startsWith("optional") }
+      |         .toMutableList()
+      |      CSV(optionalRowsRemoved).print()
       |   }
       |}
       |""".trimTemplate()
