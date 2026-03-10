@@ -38,7 +38,7 @@ fun main() {
    fw.decodeInto(target)
    println(source)
    println(target)
-   target.printSbeLayout()
+   target.printSbeLayout(verbose = true)
 
    target.payload.printSbeLayout()
 }

@@ -33,7 +33,7 @@ internal fun generateFlyweightsSection(message: Message): String {
    for (field in fieldsDecOrder) {
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
-         is Struct, is sbe4kt.ir.Message -> {
+         is Struct, is Message -> {
             nestedFwFields.add("private val ${field.name}FW = ${field.type.name}FW(buffer, $codecName.offset${fieldCap}(offset))")
          }
          is ByteArrayN -> {
@@ -55,20 +55,20 @@ internal fun generateFlyweightsSection(message: Message): String {
             nestedFwFields.add("private val ${field.name}FW = DoubleArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is CharArrayN -> {
-            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${(field.type as CharArrayN).length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is StringN -> {
-            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${(field.type as StringN).length}, buffer, $codecName.offset${fieldCap}(offset))")
+            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is ArrayN -> {
-            val structArr = field.type as ArrayN
+            val structArr = field.type
             val structName = structArr.structType.name
             val elementVar = "${field.name}ElementFW"
             nestedFwFields.add("private val $elementVar = ${structName}FW(buffer, 0)")
             nestedFwFields.add("private val ${field.name}FW = ArrayFW<${structName}FW>(${structArr.length}, ${structName}Codec.SIZE, { _, off, _ -> $elementVar.also { it.offset = off } }, buffer, $codecName.offset${fieldCap}(offset))")
          }
          is Union -> {
-            val union = field.type as Union
+            val union = field.type
             for (variant in union.allowedTypes) {
                val variantLower = variant.name.replaceFirstChar { it.lowercase() }
                nestedFwFields.add("private val ${variantLower}FW = ${variant.name}FW(buffer, $codecName.offset${fieldCap}(offset))")
@@ -82,11 +82,11 @@ internal fun generateFlyweightsSection(message: Message): String {
    val fwAccessors = fieldsDecOrder.joinToString("\n") { field ->
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
-         is Struct, is sbe4kt.ir.Message -> {
+         is Struct, is Message -> {
             "fun ${field.name}() = ${field.name}FW"
          }
          is Union -> {
-            val union = field.type as Union
+            val union = field.type
             val lines = mutableListOf<String>()
             lines.add("fun ${field.name}Id(): Int = $codecName.templateId(buffer, $codecName.offset${fieldCap}(offset))")
             for (variant in union.allowedTypes) {
@@ -98,7 +98,7 @@ internal fun generateFlyweightsSection(message: Message): String {
                "   is ${variant.name} -> ${variant.name}Codec.encodeFrom(value, buffer, $codecName.offset${fieldCap}(offset))"
             }
             val elseClause = if (union.typeName == "Any") {
-               "\n   else -> throw IllegalArgumentException(\"Unexpected type in union field '${field.name}': \${value::class.qualifiedName}\")"
+               $$"\n   else -> throw IllegalArgumentException(\"Unexpected type in union field '$${field.name}': ${value::class.qualifiedName}\")"
             } else ""
             lines.add("fun ${field.name}(value: ${union.typeName}) = apply {\n   when (value) {\n$whenBranches$elseClause\n   }\n}")
             val getBranches = union.allowedTypes.joinToString("\n") { variant ->
