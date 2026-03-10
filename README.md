@@ -1543,6 +1543,7 @@ fun main() {
 30. [ ] add configuration option `requireNotNulls` (cannot use `allowNullableTypes`)
 31. [ ] add configuration option `requireFixedLength` (cannot use `allowVarLengthFields`)
 32. [ ] add support for `javaFriendly` code generation
+33. [ ] perf optimisations, analyse jit comp activity in `sbe4kt-benchmarks`
 
 ## Issues/Questions/Notes
 
