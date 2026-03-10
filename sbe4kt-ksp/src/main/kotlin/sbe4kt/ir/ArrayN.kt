@@ -36,11 +36,8 @@ internal data class ArrayN(val length: Int, val elementType: IR.Leaf) : IR.Leaf 
       add("kotlin.random.Random")
       if (isStruct) {
          addAll(elementType.imports)
-         add("sbe4kt.lib.ArrayFW")
-      } else {
-         add("sbe4kt.lib.${elementType.name}ArrayCodec")
-         add("sbe4kt.lib.${elementType.name}ArrayFW")
       }
+      // codec/FW classes are generated in the same package, no imports needed
    }
 
    val codecName: String get() = if (isStruct) "${structType.name}Codec" else "${elementType.name}ArrayCodec"

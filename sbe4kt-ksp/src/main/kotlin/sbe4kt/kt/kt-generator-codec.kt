@@ -32,14 +32,14 @@ internal fun KSP.generateCodecSection(message: Message): String {
       |const val PACKED_HEADER = (BLOCK_LENGTH.toLong() and 0xFFFF) or ((TEMPLATE_ID.toLong() and 0xFFFF) shl 16) or ((SCHEMA_ID.toLong() and 0xFFFF) shl 32) or ((SCHEMA_VERSION.toLong() and 0xFFFF) shl 48)""".trimTemplate()
 
    val headerMethods = """
-      |fun blockLength(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset).toInt() and 0xFFFF
-      |fun templateId(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 2).toInt() and 0xFFFF
-      |fun schemaId(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 4).toInt() and 0xFFFF
-      |fun version(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 6).toInt() and 0xFFFF
-      |fun header(buffer: MutableDirectBuffer, offset: Int = 0) { buffer.putLong(offset, PACKED_HEADER) }""".trimTemplate()
+      |fun readBlockLength(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset).toInt() and 0xFFFF
+      |fun readTemplateId(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 2).toInt() and 0xFFFF
+      |fun readSchemaId(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 4).toInt() and 0xFFFF
+      |fun readVersion(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 6).toInt() and 0xFFFF
+      |fun writeHeader(buffer: MutableDirectBuffer, offset: Int = 0): Int { buffer.putLong(offset, PACKED_HEADER); return HEADER_SIZE }""".trimTemplate()
 
-   val encodePrefix = "header(buffer, offset)"
-   val decodePrefix = "val tid = templateId(buffer, offset)\n" +
+   val encodePrefix = "writeHeader(buffer, offset)"
+   val decodePrefix = "val tid = readTemplateId(buffer, offset)\n" +
       $$"if (tid != TEMPLATE_ID) throw IllegalStateException(\"Invalid TEMPLATE_ID: $tid, expected: $TEMPLATE_ID\")"
 
    return generateCodecObject(
@@ -95,38 +95,38 @@ private fun generateCodecObject(
    val fieldAccessors = simpleFields.joinToString("\n\n") { field ->
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       val sbeType = sbeKotlinType(field.type)
-      "fun ${field.name}(buffer: DirectBuffer, offset: Int = 0): $sbeType = ${
+      "fun read${fieldCap}(buffer: DirectBuffer, offset: Int = 0): $sbeType = ${
          sbeGet(field.type, "offset${fieldCap}(offset)")
-      }\n" + "fun ${field.name}(buffer: MutableDirectBuffer, offset: Int = 0, value: $sbeType) { ${
+      }\n" + "fun write${fieldCap}(buffer: MutableDirectBuffer, offset: Int = 0, value: $sbeType): Int { ${
          sbePut(field.type, "offset${fieldCap}(offset)", "value")
-      } }"
+      }; return ${field.type.size} }"
    }
 
    val encodeBody = fieldsSbeOrder.joinToString("\n") { field ->
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
-         is Struct, is Message -> "${field.type.name}Codec.encodeFrom(source.${field.name}, buffer, offset${fieldCap}(offset))"
+         is Struct, is Message -> "${field.type.name}Codec.writeFrom(source.${field.name}, buffer, offset${fieldCap}(offset))"
          is Union -> generateUnionEncodeExpr(field.type, field.name, fieldCap)
          is ArrayN -> if (field.type.isStruct)
-            "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.encodeFrom(source.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.elementType.size})"
+            "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.writeFrom(source.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.elementType.size})"
          else
             "${field.type.codecName}.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
          is StringN -> "CharArrayCodec.encodeFromCharSequence(source.${field.name}, 0, branchlessMin(source.${field.name}.length, ${field.type.length}), buffer, offset${fieldCap}(offset))"
-         else -> "${field.name}(buffer, offset, ${convertToSbe(field.type, "source.${field.name}")})"
+         else -> "write${fieldCap}(buffer, offset, ${convertToSbe(field.type, "source.${field.name}")})"
       }
    }
 
    val decodeBody = fieldsSbeOrder.joinToString("\n") { field ->
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
-         is Struct, is Message -> "${field.type.name}Codec.decodeInto(target.${field.name}, buffer, offset${fieldCap}(offset))"
+         is Struct, is Message -> "${field.type.name}Codec.readInto(target.${field.name}, buffer, offset${fieldCap}(offset))"
          is Union -> generateUnionDecodeExpr(field.type, field.name, fieldCap)
          is ArrayN -> if (field.type.isStruct)
-            "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.decodeInto(target.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.elementType.size})"
+            "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.readInto(target.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.elementType.size})"
          else
             "${field.type.codecName}.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
          is StringN -> "target.${field.name} = StringBuilder(${field.type.length}).also { CharArrayCodec.decodeIntoAppendable(it, ${field.type.length}, buffer, offset${fieldCap}(offset)) }.toString()"
-         else -> "target.${field.name} = ${convertFromSbe(field.type, "${field.name}(buffer, offset)")}"
+         else -> "target.${field.name} = ${convertFromSbe(field.type, "read${fieldCap}(buffer, offset)")}"
       }
    }
 
@@ -144,12 +144,14 @@ private fun generateCodecObject(
       |${headerMethodsBlock}
       |${fieldAccessors.indent(3)}
       |
-      |   fun encodeFrom(source: $className, buffer: MutableDirectBuffer, offset: Int = 0) {
+      |   fun writeFrom(source: $className, buffer: MutableDirectBuffer, offset: Int = 0): Int {
       |${fullEncodeBody.indent(6)}
+      |      return SIZE
       |   }
       |
-      |   fun decodeInto(target: $className, buffer: DirectBuffer, offset: Int = 0) {
+      |   fun readInto(target: $className, buffer: DirectBuffer, offset: Int = 0): Int {
       |${fullDecodeBody.indent(6)}
+      |      return SIZE
       |   }
       |
       |   fun size(): Int = SIZE
@@ -163,7 +165,7 @@ private fun generateUnionEncodeExpr(union: Union, fieldName: String, fieldCap: S
    val sb = StringBuilder()
    sb.appendLine("when (val value = source.$fieldName) {")
    for (type in union.allowedTypes) {
-      sb.appendLine("   is ${type.name} -> ${type.name}Codec.encodeFrom(value, buffer, offset${fieldCap}(offset))")
+      sb.appendLine("   is ${type.name} -> ${type.name}Codec.writeFrom(value, buffer, offset${fieldCap}(offset))")
    }
    if (union.typeName == "Any") {
       sb.appendLine($$"   else -> throw IllegalArgumentException(\"Unexpected type in union field '$$fieldName': ${value::class.qualifiedName}\")")
@@ -174,9 +176,9 @@ private fun generateUnionEncodeExpr(union: Union, fieldName: String, fieldCap: S
 
 private fun generateUnionDecodeExpr(union: Union, fieldName: String, fieldCap: String): String {
    val sb = StringBuilder()
-   sb.appendLine("target.$fieldName = when (templateId(buffer, offset${fieldCap}(offset))) {")
+   sb.appendLine("target.$fieldName = when (readTemplateId(buffer, offset${fieldCap}(offset))) {")
    for (type in union.allowedTypes) {
-      sb.appendLine("   ${type.name}Codec.TEMPLATE_ID -> new${type.name}().also { ${type.name}Codec.decodeInto(it, buffer, offset${fieldCap}(offset)) }")
+      sb.appendLine("   ${type.name}Codec.TEMPLATE_ID -> new${type.name}().also { ${type.name}Codec.readInto(it, buffer, offset${fieldCap}(offset)) }")
    }
    sb.appendLine("   else -> throw IllegalStateException(\"Unknown templateId in union field '$fieldName'\")")
    sb.append("}")

@@ -94,7 +94,7 @@ private fun sbeEncodeField(field: Field, encoderVar: String, sourcePrefix: Strin
             val encoderClass = encoderVar.replaceFirstChar { it.uppercase() }
             "run {\n" +
             "   val baseOffset = offset + sbe4kt.MessageHeaderEncoder.ENCODED_LENGTH + sbe4kt.${encoderClass}.${fieldName}EncodingOffset()\n" +
-            "   for (i in 0 until ${type.length}) ${type.structType.name}Codec.encodeFrom($sourcePrefix.$fieldName[i], buffer, baseOffset + i * ${type.elementType.size})\n" +
+            "   for (i in 0 until ${type.length}) ${type.structType.name}Codec.writeFrom($sourcePrefix.$fieldName[i], buffer, baseOffset + i * ${type.elementType.size})\n" +
             "}"
          }
          type.elementType is Int8 -> {
@@ -150,7 +150,7 @@ private fun sbeDecodeField(field: Field, decoderVar: String, targetPrefix: Strin
             val decoderClass = decoderVar.replaceFirstChar { it.uppercase() }
             "run {\n" +
             "   val baseOffset = offset + sbe4kt.MessageHeaderDecoder.ENCODED_LENGTH + sbe4kt.${decoderClass}.${fieldName}EncodingOffset()\n" +
-            "   for (i in 0 until ${type.length}) ${type.structType.name}Codec.decodeInto($targetPrefix.$fieldName[i], buffer, baseOffset + i * ${type.elementType.size})\n" +
+            "   for (i in 0 until ${type.length}) ${type.structType.name}Codec.readInto($targetPrefix.$fieldName[i], buffer, baseOffset + i * ${type.elementType.size})\n" +
             "}"
          }
          type.elementType is Int8 -> {

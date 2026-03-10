@@ -14,21 +14,15 @@
          <type name='version' primitiveType='uint16'/>
       </composite>
 
+      <type name='CharArray10' primitiveType='char' length='10' characterEncoding='US-ASCII'/>
+      <type name='CharArray20' primitiveType='char' length='20' characterEncoding='US-ASCII'/>
+      <type name='DoubleArray4' primitiveType='double' length='4'/>
+      <type name='FloatArray5' primitiveType='float' length='5'/>
+      <type name='ShortArray6' primitiveType='int16' length='6'/>
+      <type name='IntArray5' primitiveType='int32' length='5'/>
+      <type name='LongArray4' primitiveType='int64' length='4'/>
       <type name='ByteArray8' primitiveType='uint8' length='8'/>
       <type name='ByteArray24' primitiveType='uint8' length='24'/>
-
-      <type name='ShortArray6' primitiveType='int16' length='6'/>
-
-      <type name='IntArray5' primitiveType='int32' length='5'/>
-
-      <type name='LongArray4' primitiveType='int64' length='4'/>
-
-      <type name='FloatArray5' primitiveType='float' length='5'/>
-
-      <type name='DoubleArray4' primitiveType='double' length='4'/>
-
-      <type name='CharArray20' primitiveType='char' length='20' characterEncoding='US-ASCII'/>
-      <type name='CharArray10' primitiveType='char' length='10' characterEncoding='US-ASCII'/>
 
       <composite name='XY1'>
          <type name='time' primitiveType='int64'/>

@@ -9,8 +9,7 @@ internal data class StringN(val length: Int) : IR.Leaf {
    override val packageStr = ""
    override val imports: Set<String> = setOf(
       "sbe4kt.lib.nextStr",
-      "sbe4kt.lib.CharArrayCodec",
-      "sbe4kt.lib.CharArrayFW",
       "sbe4kt.lib.branchlessMin",
+      // CharArrayCodec and CharArrayFW are generated in the same package
    )
 }

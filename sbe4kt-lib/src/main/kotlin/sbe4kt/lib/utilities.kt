@@ -151,3 +151,4 @@ fun Byte.convertToBoolean(): Boolean = this.toInt() != 0
 fun Long.toBinaryString(chunkSize: Int = 8) = this.toULong().toString(2).padStart(64, '0').reversed().chunked(chunkSize).reversed().joinToString(" ")
 
 fun branchlessMin(a : Int, b : Int) : Int = b + ((a - b) and ((a - b) shr 31))
+fun branchlessMax(a : Int, b : Int) : Int = a - ((a - b) and ((a - b) shr 31))

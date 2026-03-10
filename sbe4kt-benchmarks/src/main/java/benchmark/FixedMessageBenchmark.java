@@ -23,12 +23,15 @@ public class FixedMessageBenchmark {
       final UnsafeBuffer sbeEncodeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(1024));
       final UnsafeBuffer sbeDecodeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(1024));
 
-      // sbe4kt flyweight
-      final FixedMessageFW fw = new FixedMessageFW(new UnsafeBuffer(ByteBuffer.allocateDirect(1024)), bufferIndex);
+
+      final UnsafeBuffer sbe4ktEncodeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(1024));
+      final UnsafeBuffer sbe4ktDecodeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(1024));
+      final FixedMessageFW fwE = new FixedMessageFW(sbe4ktEncodeBuffer).offset(bufferIndex);
+      final FixedMessageFW fwD = new FixedMessageFW(sbe4ktDecodeBuffer).offset(bufferIndex);
 
       {
          encodeSbe(sbeHeaderEncoder, sbeEncoder, sbeDecodeBuffer, bufferIndex);
-         encodeSbe4kt(fw);
+         encodeSbe4kt(fwD, sbe4ktDecodeBuffer, bufferIndex);
       }
    }
 
@@ -48,14 +51,14 @@ public class FixedMessageBenchmark {
    @Benchmark
    @BenchmarkMode(Mode.AverageTime)
    public int testSbe4ktEncode(final MyState state) {
-      encodeSbe4kt(state.fw);
+      encodeSbe4kt(state.fwE, state.sbe4ktEncodeBuffer, state.bufferIndex);
       return FixedMessageCodec.SIZE;
    }
 
    @Benchmark
    @BenchmarkMode(Mode.AverageTime)
    public long testSbe4ktDecode(final MyState state) {
-      return decodeSbe4kt(state.fw);
+      return decodeSbe4kt(state.fwD, state.sbe4ktDecodeBuffer, state.bufferIndex);
    }
 
    static void encodeSbe(
@@ -152,7 +155,9 @@ public class FixedMessageBenchmark {
       return hash;
    }
 
-   static void encodeSbe4kt(final FixedMessageFW fw) {
+   static void encodeSbe4kt(final FixedMessageFW fw, UnsafeBuffer buffer, int offset) {
+      fw.getBuffer().wrap(buffer);
+      fw.offset(offset);
       fw.header();
 
       fw.counters().c0(100).c1(200).c2(300).c3(400);
@@ -180,7 +185,10 @@ public class FixedMessageBenchmark {
       fw.status(Status.ACTIVE);
    }
 
-   static long decodeSbe4kt(final FixedMessageFW fw) {
+   static long decodeSbe4kt(final FixedMessageFW fw, UnsafeBuffer buffer, int offset) {
+      fw.getBuffer().wrap(buffer);
+      fw.offset(offset);
+
       long hash = 0;
 
       hash += fw.blockLength();
