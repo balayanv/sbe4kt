@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "sbe4kt"
-version = "0.1.3-SNAPSHOT"
+version = "0.1.4-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -18,6 +18,14 @@ dependencies {
 
 kotlin {
     jvmToolchain(25)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+java {
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
 }
 
 tasks.withType<Test> {
