@@ -21,11 +21,6 @@ internal fun KSP.generateCodecSection(message: Message): String {
       return "// ${className}Codec skipped: contains unsupported field types (not yet supported)"
    }
 
-   val packedHeader = (blockLength.toLong() and 0xFFFF) or
-      ((templateId.toLong() and 0xFFFF) shl 16) or
-      ((schemaId.toLong() and 0xFFFF) shl 32) or
-      ((schemaVersion.toLong() and 0xFFFF) shl 48)
-
    val headerConstants = """
       |const val BLOCK_LENGTH = $blockLength
       |const val TEMPLATE_ID = $templateId
@@ -34,7 +29,7 @@ internal fun KSP.generateCodecSection(message: Message): String {
       |const val HEADER_SIZE = 8
       |
       |const val SIZE = HEADER_SIZE + BLOCK_LENGTH
-      |const val PACKED_HEADER = ${packedHeader}L""".trimTemplate()
+      |const val PACKED_HEADER = (BLOCK_LENGTH.toLong() and 0xFFFF) or ((TEMPLATE_ID.toLong() and 0xFFFF) shl 16) or ((SCHEMA_ID.toLong() and 0xFFFF) shl 32) or ((SCHEMA_VERSION.toLong() and 0xFFFF) shl 48)""".trimTemplate()
 
    val headerMethods = """
       |fun blockLength(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset).toInt() and 0xFFFF
