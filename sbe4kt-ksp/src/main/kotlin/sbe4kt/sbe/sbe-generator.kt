@@ -1,20 +1,11 @@
 package sbe4kt.sbe
 
 import sbe4kt.KSP
-import sbe4kt.ir.ByteArrayN
-import sbe4kt.ir.DoubleArrayN
+import sbe4kt.ir.*
+import sbe4kt.ir.Char
+import sbe4kt.ir.Double
 import sbe4kt.ir.Enum
-import sbe4kt.ir.FloatArrayN
-import sbe4kt.ir.IR
-import sbe4kt.ir.IntArrayN
-import sbe4kt.ir.CharArrayN
-import sbe4kt.ir.LongArrayN
-import sbe4kt.ir.Message
-import sbe4kt.ir.ShortArrayN
-import sbe4kt.ir.StringN
-import sbe4kt.ir.Struct
-import sbe4kt.ir.ArrayN
-import sbe4kt.ir.Union
+import sbe4kt.ir.Float
 import sbe4kt.migration.PrevMessage
 import sbe4kt.util.indent
 import sbe4kt.util.trimTemplate
@@ -25,13 +16,9 @@ internal fun KSP.generateSbe() {
    val version = evolution?.newVersion ?: 0
 
    val schemaFile = File(resourcesDir, "sbe-schema.xml")
-   val byteArrayTypes = ir.byteArraySizes.joinToString("\n") { generateByteArrayType(it) }
-   val shortArrayTypes = ir.shortArraySizes.joinToString("\n") { generateShortArrayType(it) }
-   val intArrayTypes = ir.intArraySizes.joinToString("\n") { generateIntArrayType(it) }
-   val longArrayTypes = ir.longArraySizes.joinToString("\n") { generateLongArrayType(it) }
-   val floatArrayTypes = ir.floatArraySizes.joinToString("\n") { generateFloatArrayType(it) }
-   val doubleArrayTypes = ir.doubleArraySizes.joinToString("\n") { generateDoubleArrayType(it) }
-   val charArrayTypes = ir.charArraySizes.joinToString("\n") { generateCharArrayType(it) }
+   val arrayTypes = ir.arraySizes
+      .sortedWith(compareBy({ it.first::class.simpleName }, { it.second }))
+      .joinToString("\n") { (elementType, length) -> generateArrayType(elementType, length) }
    val structs = ir.structs.joinToString("\n") { generateCompositeType(it) }
    val activeMessages = ir.messages.joinToString("\n") { generateMessageBody(it, version) }
    val deprecatedMessages = ir.deprecatedMessages.joinToString("\n") { generateDeprecatedMessageBody(it, version) }
@@ -54,19 +41,7 @@ internal fun KSP.generateSbe() {
       |         <type name='version' primitiveType='uint16'/>
       |      </composite>
       |
-      |${byteArrayTypes.indent(6)}
-      |
-      |${shortArrayTypes.indent(6)}
-      |
-      |${intArrayTypes.indent(6)}
-      |
-      |${longArrayTypes.indent(6)}
-      |
-      |${floatArrayTypes.indent(6)}
-      |
-      |${doubleArrayTypes.indent(6)}
-      |
-      |${charArrayTypes.indent(6)}
+      |${arrayTypes.indent(6)}
       |
       |${structs.indent(6)}
       |   </types>
@@ -222,7 +197,7 @@ private fun generateCompositeType(struct: Struct): String {
 
 private fun generateCompositeField(fieldName: String, type: IR.Leaf, offset: Int = -1): String {
    val isPrimitive = when (type) {
-      is ByteArrayN, is ShortArrayN, is IntArrayN, is LongArrayN, is FloatArrayN, is DoubleArrayN, is CharArrayN, is StringN, is Enum, is Struct, is ArrayN, is Union -> false
+      is ArrayN, is StringN, is Enum, is Struct, is Union -> false
       else -> true
    }
 
@@ -246,16 +221,16 @@ private fun generateDeprecatedMessageBody(prevMsg: PrevMessage, schemaVersion: I
    return "<sbe:message name='${prevMsg.name}' id='${prevMsg.id}' deprecated='$deprecatedVersion' description='sbe4kt generated sbe schema for ${prevMsg.name} was removed in since version $deprecatedVersion'/>"
 }
 
-private fun generateByteArrayType(size: Int) = "<type name='ByteArray$size' primitiveType='uint8' length='$size'/>"
-
-private fun generateShortArrayType(size: Int) = "<type name='ShortArray$size' primitiveType='int16' length='$size'/>"
-
-private fun generateIntArrayType(size: Int) = "<type name='IntArray$size' primitiveType='int32' length='$size'/>"
-
-private fun generateLongArrayType(size: Int) = "<type name='LongArray$size' primitiveType='int64' length='$size'/>"
-
-private fun generateFloatArrayType(size: Int) = "<type name='FloatArray$size' primitiveType='float' length='$size'/>"
-
-private fun generateDoubleArrayType(size: Int) = "<type name='DoubleArray$size' primitiveType='double' length='$size'/>"
-
-private fun generateCharArrayType(size: Int) = "<type name='CharArray$size' primitiveType='char' length='$size' characterEncoding='US-ASCII'/>"
+private fun generateArrayType(elementType: IR.Leaf, length: Int): String {
+   val (typeName, primitiveType, charEnc) = when (elementType) {
+      is Int8 -> Triple("ByteArray$length", "uint8", "")
+      is Int16 -> Triple("ShortArray$length", "int16", "")
+      is Int32 -> Triple("IntArray$length", "int32", "")
+      is Int64 -> Triple("LongArray$length", "int64", "")
+      is Float -> Triple("FloatArray$length", "float", "")
+      is Double -> Triple("DoubleArray$length", "double", "")
+      is Char -> Triple("CharArray$length", "char", " characterEncoding='US-ASCII'")
+      else -> error("Unsupported array element type for SBE schema: ${elementType::class.simpleName}")
+   }
+   return "<type name='$typeName' primitiveType='$primitiveType' length='$length'$charEnc/>"
+}

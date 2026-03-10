@@ -149,7 +149,7 @@ internal data class Message(
       fields.forEach { field ->
          when (val type = field.type) {
             is Struct -> type.declaration.containingFile?.let { dependentFiles.add(it) }
-            is ArrayN -> type.structType.declaration.containingFile?.let { dependentFiles.add(it) }
+            is ArrayN -> if (type.isStruct) type.structType.declaration.containingFile?.let { dependentFiles.add(it) }
             is Message -> type.declaration.containingFile?.let { dependentFiles.add(it) }
             else -> {} // Primitive types don't have source files
          }

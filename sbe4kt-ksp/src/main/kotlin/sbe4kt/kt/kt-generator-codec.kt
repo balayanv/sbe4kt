@@ -90,7 +90,7 @@ private fun generateCodecObject(
       "fun offset${fieldCap}(offset: Int = 0) = offset + RELATIVE_OFFSET_${fieldUpper}"
    }
 
-   val simpleFields = fieldsDecOrder.filter { it.type !is Struct && it.type !is Message && it.type !is Union && it.type !is ByteArrayN && it.type !is ShortArrayN && it.type !is IntArrayN && it.type !is LongArrayN && it.type !is FloatArrayN && it.type !is DoubleArrayN && it.type !is CharArrayN && it.type !is StringN && it.type !is ArrayN }
+   val simpleFields = fieldsDecOrder.filter { it.type !is Struct && it.type !is Message && it.type !is Union && it.type !is ArrayN && it.type !is StringN }
 
    val fieldAccessors = simpleFields.joinToString("\n\n") { field ->
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
@@ -107,15 +107,11 @@ private fun generateCodecObject(
       when (field.type) {
          is Struct, is Message -> "${field.type.name}Codec.encodeFrom(source.${field.name}, buffer, offset${fieldCap}(offset))"
          is Union -> generateUnionEncodeExpr(field.type, field.name, fieldCap)
-         is ByteArrayN -> "ByteArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is ShortArrayN -> "ShortArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is IntArrayN -> "IntArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is LongArrayN -> "LongArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is FloatArrayN -> "FloatArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is DoubleArrayN -> "DoubleArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is CharArrayN -> "CharArrayCodec.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is ArrayN -> if (field.type.isStruct)
+            "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.encodeFrom(source.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.elementType.size})"
+         else
+            "${field.type.codecName}.encodeFrom(source.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
          is StringN -> "CharArrayCodec.encodeFromCharSequence(source.${field.name}, 0, branchlessMin(source.${field.name}.length, ${field.type.length}), buffer, offset${fieldCap}(offset))"
-         is ArrayN -> "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.encodeFrom(source.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.structType.encodedLength})"
          else -> "${field.name}(buffer, offset, ${convertToSbe(field.type, "source.${field.name}")})"
       }
    }
@@ -125,15 +121,11 @@ private fun generateCodecObject(
       when (field.type) {
          is Struct, is Message -> "${field.type.name}Codec.decodeInto(target.${field.name}, buffer, offset${fieldCap}(offset))"
          is Union -> generateUnionDecodeExpr(field.type, field.name, fieldCap)
-         is ByteArrayN -> "ByteArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is ShortArrayN -> "ShortArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is IntArrayN -> "IntArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is LongArrayN -> "LongArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is FloatArrayN -> "FloatArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is DoubleArrayN -> "DoubleArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
-         is CharArrayN -> "CharArrayCodec.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
+         is ArrayN -> if (field.type.isStruct)
+            "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.decodeInto(target.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.elementType.size})"
+         else
+            "${field.type.codecName}.decodeInto(target.${field.name}, 0, ${field.type.length}, buffer, offset${fieldCap}(offset))"
          is StringN -> "target.${field.name} = StringBuilder(${field.type.length}).also { CharArrayCodec.decodeIntoAppendable(it, ${field.type.length}, buffer, offset${fieldCap}(offset)) }.toString()"
-         is ArrayN -> "for (i in 0 until ${field.type.length}) ${field.type.structType.name}Codec.decodeInto(target.${field.name}[i], buffer, offset${fieldCap}(offset) + i * ${field.type.structType.encodedLength})"
          else -> "target.${field.name} = ${convertFromSbe(field.type, "${field.name}(buffer, offset)")}"
       }
    }
@@ -199,15 +191,8 @@ internal fun isSupportedCodecType(type: IR.Leaf): Boolean = when (type) {
    is Value -> isSupportedCodecType(type.underlyingType)
    is Tags -> isSupportedCodecType(type.valueType)
    is Str64Value -> true
-   is ByteArrayN -> true
-   is ShortArrayN -> true
-   is IntArrayN -> true
-   is LongArrayN -> true
-   is FloatArrayN -> true
-   is DoubleArrayN -> true
-   is CharArrayN -> true
+   is ArrayN -> if (type.isStruct) type.structType.fields.all { isSupportedCodecType(it.type) } else true
    is StringN -> true
-   is ArrayN -> type.structType.fields.all { isSupportedCodecType(it.type) }
    is Struct -> type.fields.all { isSupportedCodecType(it.type) }
    is Message -> type.fields.all { isSupportedCodecType(it.type) }
    is Union -> type.allowedTypes.all { msg -> msg.fields.all { isSupportedCodecType(it.type) } }
@@ -265,15 +250,8 @@ internal fun convertToSbe(type: IR.Leaf, valueExpr: String): String = when (type
    is Value -> convertToSbe(type.underlyingType, "$valueExpr.${type.innerName}")
    is Tags -> convertToSbe(type.valueType, valueExpr)
    is Str64Value -> "$valueExpr.value"
-   is ByteArrayN -> valueExpr
-   is ShortArrayN -> valueExpr
-   is IntArrayN -> valueExpr
-   is LongArrayN -> valueExpr
-   is FloatArrayN -> valueExpr
-   is DoubleArrayN -> valueExpr
-   is CharArrayN -> valueExpr
-   is StringN -> valueExpr
    is ArrayN -> valueExpr
+   is StringN -> valueExpr
    else -> throw UnsupportedOperationException("convertToSbe not supported for ${type::class.simpleName}")
 }
 
@@ -285,14 +263,7 @@ internal fun convertFromSbe(type: IR.Leaf, valueExpr: String): String = when (ty
    is Value -> "${type.name}(${convertFromSbe(type.underlyingType, valueExpr)})"
    is Tags -> convertFromSbe(type.valueType, valueExpr)
    is Str64Value -> "${type.name}($valueExpr)"
-   is ByteArrayN -> valueExpr
-   is ShortArrayN -> valueExpr
-   is IntArrayN -> valueExpr
-   is LongArrayN -> valueExpr
-   is FloatArrayN -> valueExpr
-   is DoubleArrayN -> valueExpr
-   is CharArrayN -> valueExpr
-   is StringN -> valueExpr
    is ArrayN -> valueExpr
+   is StringN -> valueExpr
    else -> throw UnsupportedOperationException("convertFromSbe not supported for ${type::class.simpleName}")
 }

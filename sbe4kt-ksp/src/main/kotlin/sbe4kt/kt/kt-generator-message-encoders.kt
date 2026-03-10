@@ -89,36 +89,26 @@ private fun sbeEncodeField(field: Field, encoderVar: String, sourcePrefix: Strin
          sb.append("}")
          sb.toString()
       }
-      is ByteArrayN -> {
-         val fieldCap = fieldName.replaceFirstChar { it.uppercase() }
-         "$encoderVar.put$fieldCap($sourcePrefix.$fieldName, 0, ${type.length})"
-      }
-      is ShortArrayN -> {
-         "for (i in 0 until ${type.length}) $encoderVar.$fieldName(i, $sourcePrefix.$fieldName[i])"
-      }
-      is IntArrayN -> {
-         "for (i in 0 until ${type.length}) $encoderVar.$fieldName(i, $sourcePrefix.$fieldName[i])"
-      }
-      is LongArrayN -> {
-         "for (i in 0 until ${type.length}) $encoderVar.$fieldName(i, $sourcePrefix.$fieldName[i])"
-      }
-      is FloatArrayN -> {
-         "for (i in 0 until ${type.length}) $encoderVar.$fieldName(i, $sourcePrefix.$fieldName[i])"
-      }
-      is DoubleArrayN -> {
-         "for (i in 0 until ${type.length}) $encoderVar.$fieldName(i, $sourcePrefix.$fieldName[i])"
-      }
-      is CharArrayN -> {
-         "for (i in 0 until ${type.length}) $encoderVar.$fieldName(i, $sourcePrefix.$fieldName[i].code.toByte())"
+      is ArrayN -> when {
+         type.isStruct -> {
+            val encoderClass = encoderVar.replaceFirstChar { it.uppercase() }
+            "run {\n" +
+            "   val baseOffset = offset + sbe4kt.MessageHeaderEncoder.ENCODED_LENGTH + sbe4kt.${encoderClass}.${fieldName}EncodingOffset()\n" +
+            "   for (i in 0 until ${type.length}) ${type.structType.name}Codec.encodeFrom($sourcePrefix.$fieldName[i], buffer, baseOffset + i * ${type.elementType.size})\n" +
+            "}"
+         }
+         type.elementType is Int8 -> {
+            val fieldCap = fieldName.replaceFirstChar { it.uppercase() }
+            "$encoderVar.put$fieldCap($sourcePrefix.$fieldName, 0, ${type.length})"
+         }
+         type.elementType is Char -> {
+            "for (i in 0 until ${type.length}) $encoderVar.$fieldName(i, $sourcePrefix.$fieldName[i].code.toByte())"
+         }
+         else -> {
+            "for (i in 0 until ${type.length}) $encoderVar.$fieldName(i, $sourcePrefix.$fieldName[i])"
+         }
       }
       is StringN -> "$encoderVar.$fieldName($sourcePrefix.$fieldName)"
-      is ArrayN -> {
-         val encoderClass = encoderVar.replaceFirstChar { it.uppercase() }
-         "run {\n" +
-         "   val baseOffset = offset + sbe4kt.MessageHeaderEncoder.ENCODED_LENGTH + sbe4kt.${encoderClass}.${fieldName}EncodingOffset()\n" +
-         "   for (i in 0 until ${type.length}) ${type.structType.name}Codec.encodeFrom($sourcePrefix.$fieldName[i], buffer, baseOffset + i * ${type.structType.encodedLength})\n" +
-         "}"
-      }
       else -> "$encoderVar.$fieldName(${type.convertToSbe("$sourcePrefix.$fieldName")})"
    }
 }
@@ -155,36 +145,26 @@ private fun sbeDecodeField(field: Field, decoderVar: String, targetPrefix: Strin
          sb.append("}")
          sb.toString()
       }
-      is ByteArrayN -> {
-         val fieldCap = fieldName.replaceFirstChar { it.uppercase() }
-         "$decoderVar.get$fieldCap($targetPrefix.$fieldName, 0, ${type.length})"
-      }
-      is ShortArrayN -> {
-         "for (i in 0 until ${type.length}) $targetPrefix.$fieldName[i] = $decoderVar.$fieldName(i)"
-      }
-      is IntArrayN -> {
-         "for (i in 0 until ${type.length}) $targetPrefix.$fieldName[i] = $decoderVar.$fieldName(i)"
-      }
-      is LongArrayN -> {
-         "for (i in 0 until ${type.length}) $targetPrefix.$fieldName[i] = $decoderVar.$fieldName(i)"
-      }
-      is FloatArrayN -> {
-         "for (i in 0 until ${type.length}) $targetPrefix.$fieldName[i] = $decoderVar.$fieldName(i)"
-      }
-      is DoubleArrayN -> {
-         "for (i in 0 until ${type.length}) $targetPrefix.$fieldName[i] = $decoderVar.$fieldName(i)"
-      }
-      is CharArrayN -> {
-         "for (i in 0 until ${type.length}) $targetPrefix.$fieldName[i] = $decoderVar.$fieldName(i).toInt().toChar()"
+      is ArrayN -> when {
+         type.isStruct -> {
+            val decoderClass = decoderVar.replaceFirstChar { it.uppercase() }
+            "run {\n" +
+            "   val baseOffset = offset + sbe4kt.MessageHeaderDecoder.ENCODED_LENGTH + sbe4kt.${decoderClass}.${fieldName}EncodingOffset()\n" +
+            "   for (i in 0 until ${type.length}) ${type.structType.name}Codec.decodeInto($targetPrefix.$fieldName[i], buffer, baseOffset + i * ${type.elementType.size})\n" +
+            "}"
+         }
+         type.elementType is Int8 -> {
+            val fieldCap = fieldName.replaceFirstChar { it.uppercase() }
+            "$decoderVar.get$fieldCap($targetPrefix.$fieldName, 0, ${type.length})"
+         }
+         type.elementType is Char -> {
+            "for (i in 0 until ${type.length}) $targetPrefix.$fieldName[i] = $decoderVar.$fieldName(i).toInt().toChar()"
+         }
+         else -> {
+            "for (i in 0 until ${type.length}) $targetPrefix.$fieldName[i] = $decoderVar.$fieldName(i)"
+         }
       }
       is StringN -> "$targetPrefix.$fieldName = $decoderVar.$fieldName()"
-      is ArrayN -> {
-         val decoderClass = decoderVar.replaceFirstChar { it.uppercase() }
-         "run {\n" +
-         "   val baseOffset = offset + sbe4kt.MessageHeaderDecoder.ENCODED_LENGTH + sbe4kt.${decoderClass}.${fieldName}EncodingOffset()\n" +
-         "   for (i in 0 until ${type.length}) ${type.structType.name}Codec.decodeInto($targetPrefix.$fieldName[i], buffer, baseOffset + i * ${type.structType.encodedLength})\n" +
-         "}"
-      }
       else -> "$targetPrefix.$fieldName = ${type.convertFromSbe("$decoderVar.$fieldName()")}"
    }
 }

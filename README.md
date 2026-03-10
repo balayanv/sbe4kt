@@ -9,7 +9,7 @@ Also i do not like xml.
 # SBE4KT
 
 SBE4KT is a Kotlin Symbol Processor (a compiler plugin) with a simple goal : 
-to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs. Its a port of a different project called CAPNP4KT which does the same but for [CapNProto](https://capnproto.org/) instead of SBE.
+to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs (and augment it when it makes sense). 
 
 It adds support for lots of features not available in SBE via code generation, 
 using SBE Encoder/Decoders as the building blocks to support the features we all need on serialziation layer. Usually developers write these themselves.
@@ -230,9 +230,15 @@ Flyweights are more efficient than `encode/decode` functions (which are still 0 
 These are the basics (the overall high level interface) of the library, do follow the instructions of [Tutorial](#full-tutorial) section to get familiar with [all the features](#core-features-current-state-of-the-library) of the library.
 
 ---
-## Recommendations, Conventions and Defaults
+## History, Recommendations, Conventions and Defaults
 
-There are some conventions and defaults that you should be aware of, most of these are optional, but they are made defaults for a reason (do not expect good performance if you choose to deviate).
+SBE4KT is a port of a different project called CAPNP4KT which does the same but for [CapNProto](https://capnproto.org/) instead of SBE. Since i decided to use SBE I've also created this project (and this time open source it). Capnp variant is not open source since its tightly couppled with my custom projects and there is not much public interest in it (feel free to reach out if you're interested in that).
+
+I use kotlin for code generation and in my personal projects, so this library is geared towards taking full advantage of kotlins features, however if you're a java developer 99% of everything this library has to offer is still valid for you (kotlin has full interop with java). Another big reason is that kotlin code is much more compact, so code generation logic stays much simpler (because of type inference/extension methods etc).
+
+This library is primarily made for low latency and high performance systems. **The intended way to use it is with flyweights pointing to buffers directly reading and writing fixed sized messages from/to them.*
+
+There are some conventions and defaults that you should be aware of, most of these are optional, but they are made defaults for a reason. 
 
 * Always define your message ids in real systems (autogen ids are for convenience only)
   * You can enforce it via `requireMessageIds`

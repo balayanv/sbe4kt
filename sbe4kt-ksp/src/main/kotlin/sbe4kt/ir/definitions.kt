@@ -44,13 +44,7 @@ internal data class Schema(
    val structs: ArrayList<Struct> = ArrayList()
    val messages: ArrayList<Message> = ArrayList()
    val deprecatedMessages: ArrayList<PrevMessage> = ArrayList()
-   val byteArraySizes = HashSet<Int>()
-   val shortArraySizes = HashSet<Int>()
-   val intArraySizes = HashSet<Int>()
-   val longArraySizes = HashSet<Int>()
-   val floatArraySizes = HashSet<Int>()
-   val doubleArraySizes = HashSet<Int>()
-   val charArraySizes = HashSet<Int>()
+   val arraySizes = HashSet<Pair<IR.Leaf, Int>>()
    var evolution: SchemaEvolution? = null
 
    val ids = HashSet<Int>()
@@ -118,23 +112,19 @@ internal data class Schema(
 
    private fun extractSpecialTypes(type: IR.Leaf) {
       when (type) {
-         is ByteArrayN -> byteArraySizes.add(type.length)
-         is ShortArrayN -> shortArraySizes.add(type.length)
-         is IntArrayN -> intArraySizes.add(type.length)
-         is LongArrayN -> longArraySizes.add(type.length)
-         is FloatArrayN -> floatArraySizes.add(type.length)
-         is DoubleArrayN -> doubleArraySizes.add(type.length)
-         is CharArrayN -> charArraySizes.add(type.length)
-         is StringN -> charArraySizes.add(type.length)
+         is ArrayN -> {
+            if (type.isStruct) arraySizes.add(Int8 to type.size)
+            else arraySizes.add(type.elementType to type.length)
+         }
+         is StringN -> arraySizes.add(Char to type.length)
          is Value -> extractSpecialTypes(type.underlyingType)
          is Tags -> extractSpecialTypes(type.valueType)
-         is ArrayN -> byteArraySizes.add(type.size)
-         is Message -> byteArraySizes.add(type.size) // Nested messages use ByteArrayN
+         is Message -> arraySizes.add(Int8 to type.size)
          is Union -> {
-            byteArraySizes.add(type.maxSize)
+            arraySizes.add(Int8 to type.maxSize)
             type.allowedTypes.forEach { msg -> msg.fields.forEach { extractSpecialTypes(it.type) } }
          }
-         else -> {} // primitives, structs don't contain special types to extract
+         else -> {}
       }
    }
 
@@ -198,36 +188,19 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
    }
 
    if (size > 0) {
-      if (declaration.qualifiedName() == "kotlin.ByteArray") {
-         require(size > 0) { "ByteArray size must be positive, got $size" }
-         return ByteArrayN(size)
+      val elementKind: IR.Leaf? = when (declaration.qualifiedName()) {
+         "kotlin.ByteArray" -> Int8
+         "kotlin.ShortArray" -> Int16
+         "kotlin.IntArray" -> Int32
+         "kotlin.LongArray" -> Int64
+         "kotlin.FloatArray" -> sbe4kt.ir.Float
+         "kotlin.DoubleArray" -> sbe4kt.ir.Double
+         "kotlin.CharArray" -> sbe4kt.ir.Char
+         else -> null
       }
-      if (declaration.qualifiedName() == "kotlin.ShortArray") {
-         require(size > 0) { "ShortArray size must be positive, got $size" }
-         return ShortArrayN(size)
-      }
-      if (declaration.qualifiedName() == "kotlin.IntArray") {
-         require(size > 0) { "IntArray size must be positive, got $size" }
-         return IntArrayN(size)
-      }
-      if (declaration.qualifiedName() == "kotlin.LongArray") {
-         require(size > 0) { "LongArray size must be positive, got $size" }
-         return LongArrayN(size)
-      }
-      if (declaration.qualifiedName() == "kotlin.FloatArray") {
-         require(size > 0) { "FloatArray size must be positive, got $size" }
-         return FloatArrayN(size)
-      }
-      if (declaration.qualifiedName() == "kotlin.DoubleArray") {
-         require(size > 0) { "DoubleArray size must be positive, got $size" }
-         return DoubleArrayN(size)
-      }
-      if (declaration.qualifiedName() == "kotlin.CharArray") {
-         require(size > 0) { "CharArray size must be positive, got $size" }
-         return CharArrayN(size)
-      }
+      if (elementKind != null) return ArrayN(size, elementKind)
+
       if (declaration.qualifiedName() == "kotlin.String" || declaration.qualifiedName() == "kotlin.CharSequence") {
-         require(size > 0) { "String size must be positive, got $size" }
          return StringN(size)
       }
       if (declaration.qualifiedName() == "kotlin.Array") {

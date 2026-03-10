@@ -139,7 +139,7 @@ internal object KSP : SymbolProcessor {
       val compositesUsedInMessages = ir.messages.flatMap { message ->
          message.fields.mapNotNull { field ->
             (field.type as? Struct)?.name
-               ?: (field.type as? sbe4kt.ir.ArrayN)?.structType?.name
+               ?: (field.type as? sbe4kt.ir.ArrayN)?.takeIf { it.isStruct }?.structType?.name
          }
       }.toSet()
 

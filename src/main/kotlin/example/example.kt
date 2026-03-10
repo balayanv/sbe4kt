@@ -9,9 +9,9 @@ import java.util.Objects
 @SBE
 data class Msg(
    var id: TimeId,
-   var payload: Payload
-//   @META(size = 8)
-//   var arr : IntArray
+//   var payload: Payload,
+   @META(size = 8)
+   var arr : IntArray,
 )
 
 @SBE(isStruct = true)

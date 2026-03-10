@@ -2,13 +2,6 @@ package sbe4kt.kt
 
 import com.google.devtools.ksp.processing.Dependencies
 import sbe4kt.KSP
-import sbe4kt.ir.ByteArrayN
-import sbe4kt.ir.CharArrayN
-import sbe4kt.ir.DoubleArrayN
-import sbe4kt.ir.FloatArrayN
-import sbe4kt.ir.IntArrayN
-import sbe4kt.ir.LongArrayN
-import sbe4kt.ir.ShortArrayN
 import sbe4kt.ir.Message
 import sbe4kt.ir.ArrayN
 import sbe4kt.util.indent
@@ -21,15 +14,13 @@ internal fun generateTestsSection(message: Message): String {
    val hasUnsupportedFields = message.fields.any { !isSupportedCodecType(it.type) }
    if (hasUnsupportedFields) return "// Tests skipped: $className contains unsupported field types"
 
-   val hasArrayFields = message.fields.any { it.type is ByteArrayN || it.type is ShortArrayN || it.type is IntArrayN || it.type is LongArrayN || it.type is FloatArrayN || it.type is DoubleArrayN || it.type is CharArrayN || it.type is ArrayN }
+   val hasArrayFields = message.fields.any { it.type is ArrayN }
    val assertFn = if (hasArrayFields) "assertFieldsEqual" else "assertEquals"
 
    val assertHelper = if (hasArrayFields) {
       val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
       val assertions = fieldsDecOrder.joinToString("\n") { field ->
          if (field.type is ArrayN) {
-            "assertArrayEquals(expected.${field.name}, actual.${field.name}, \"${field.name}\")"
-         } else if (field.type is ByteArrayN || field.type is ShortArrayN || field.type is IntArrayN || field.type is LongArrayN || field.type is FloatArrayN || field.type is DoubleArrayN || field.type is CharArrayN) {
             "assertArrayEquals(expected.${field.name}, actual.${field.name}, \"${field.name}\")"
          } else {
             "assertEquals(expected.${field.name}, actual.${field.name}, \"${field.name}\")"
@@ -114,7 +105,7 @@ internal fun KSP.generateTestsForMessage(message: Message) {
    )
 
    // Generate imports section
-   val hasArrayFields = message.fields.any { it.type is ByteArrayN || it.type is ShortArrayN || it.type is IntArrayN || it.type is LongArrayN || it.type is FloatArrayN || it.type is DoubleArrayN || it.type is CharArrayN || it.type is ArrayN }
+   val hasArrayFields = message.fields.any { it.type is ArrayN }
    val testImports = mutableSetOf(
       "org.agrona.concurrent.UnsafeBuffer",
       "org.junit.jupiter.api.Test",

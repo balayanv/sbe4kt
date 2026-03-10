@@ -1,12 +1,5 @@
 package sbe4kt.kt
 
-import sbe4kt.ir.ByteArrayN
-import sbe4kt.ir.DoubleArrayN
-import sbe4kt.ir.FloatArrayN
-import sbe4kt.ir.IntArrayN
-import sbe4kt.ir.CharArrayN
-import sbe4kt.ir.LongArrayN
-import sbe4kt.ir.ShortArrayN
 import sbe4kt.ir.Message
 import sbe4kt.ir.StringN
 import sbe4kt.ir.Struct
@@ -38,44 +31,19 @@ internal fun generateFlyweightsSection(message: Message): String {
             nestedFwFields.add("private val ${field.name}FW = ${field.type.name}FW(buffer, $codecName.offset${fieldCap}(offset))")
             nestedFwVarNames.add("${field.name}FW")
          }
-         is ByteArrayN -> {
-            nestedFwFields.add("private val ${field.name}FW = ByteArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
-            nestedFwVarNames.add("${field.name}FW")
-         }
-         is ShortArrayN -> {
-            nestedFwFields.add("private val ${field.name}FW = ShortArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
-            nestedFwVarNames.add("${field.name}FW")
-         }
-         is IntArrayN -> {
-            nestedFwFields.add("private val ${field.name}FW = IntArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
-            nestedFwVarNames.add("${field.name}FW")
-         }
-         is LongArrayN -> {
-            nestedFwFields.add("private val ${field.name}FW = LongArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
-            nestedFwVarNames.add("${field.name}FW")
-         }
-         is FloatArrayN -> {
-            nestedFwFields.add("private val ${field.name}FW = FloatArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
-            nestedFwVarNames.add("${field.name}FW")
-         }
-         is DoubleArrayN -> {
-            nestedFwFields.add("private val ${field.name}FW = DoubleArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
-            nestedFwVarNames.add("${field.name}FW")
-         }
-         is CharArrayN -> {
-            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+         is ArrayN -> {
+            if (field.type.isStruct) {
+               val structName = field.type.structType.name
+               val elementVar = "${field.name}ElementFW"
+               nestedFwFields.add("private val $elementVar = ${structName}FW(buffer, 0)")
+               nestedFwFields.add("private val ${field.name}FW = ArrayFW<${structName}FW>(${field.type.length}, ${structName}Codec.SIZE, { _, off, _ -> $elementVar.also { it.offset = off } }, buffer, $codecName.offset${fieldCap}(offset))")
+            } else {
+               nestedFwFields.add("private val ${field.name}FW = ${field.type.fwName}(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
+            }
             nestedFwVarNames.add("${field.name}FW")
          }
          is StringN -> {
             nestedFwFields.add("private val ${field.name}FW = CharArrayFW(${field.type.length}, buffer, $codecName.offset${fieldCap}(offset))")
-            nestedFwVarNames.add("${field.name}FW")
-         }
-         is ArrayN -> {
-            val structArr = field.type
-            val structName = structArr.structType.name
-            val elementVar = "${field.name}ElementFW"
-            nestedFwFields.add("private val $elementVar = ${structName}FW(buffer, 0)")
-            nestedFwFields.add("private val ${field.name}FW = ArrayFW<${structName}FW>(${structArr.length}, ${structName}Codec.SIZE, { _, off, _ -> $elementVar.also { it.offset = off } }, buffer, $codecName.offset${fieldCap}(offset))")
             nestedFwVarNames.add("${field.name}FW")
          }
          is Union -> {
@@ -120,31 +88,7 @@ internal fun generateFlyweightsSection(message: Message): String {
             lines.add("fun ${field.name}() = when (${field.name}Id()) {\n$getBranches\n   else -> throw IllegalStateException(\"Unknown templateId in union field '${field.name}'\")\n}")
             lines.joinToString("\n")
          }
-         is ArrayN -> {
-            "fun ${field.name}() = ${field.name}FW"
-         }
-         is ByteArrayN -> {
-            "fun ${field.name}() = ${field.name}FW"
-         }
-         is ShortArrayN -> {
-            "fun ${field.name}() = ${field.name}FW"
-         }
-         is IntArrayN -> {
-            "fun ${field.name}() = ${field.name}FW"
-         }
-         is LongArrayN -> {
-            "fun ${field.name}() = ${field.name}FW"
-         }
-         is FloatArrayN -> {
-            "fun ${field.name}() = ${field.name}FW"
-         }
-         is DoubleArrayN -> {
-            "fun ${field.name}() = ${field.name}FW"
-         }
-         is CharArrayN -> {
-            "fun ${field.name}() = ${field.name}FW"
-         }
-         is StringN -> {
+         is ArrayN, is StringN -> {
             "fun ${field.name}() = ${field.name}FW"
          }
          is Tags -> {

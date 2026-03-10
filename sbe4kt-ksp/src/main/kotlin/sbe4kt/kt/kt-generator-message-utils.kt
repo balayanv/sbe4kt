@@ -1,12 +1,5 @@
 package sbe4kt.kt
 
-import sbe4kt.ir.ByteArrayN
-import sbe4kt.ir.DoubleArrayN
-import sbe4kt.ir.FloatArrayN
-import sbe4kt.ir.IntArrayN
-import sbe4kt.ir.CharArrayN
-import sbe4kt.ir.LongArrayN
-import sbe4kt.ir.ShortArrayN
 import sbe4kt.ir.Message
 import sbe4kt.ir.Struct
 import sbe4kt.ir.ArrayN
@@ -77,7 +70,7 @@ private fun generateRows(message: Message): String {
       }
 
       if (fieldIr.type is Struct) {
-         val struct = fieldIr.type as Struct
+         val struct = fieldIr.type
          val offset = fieldIr.offset + headerSize
 
          addSeparator(metadata = "optional.separator")
@@ -96,12 +89,11 @@ private fun generateRows(message: Message): String {
       } else {
          val offset = fieldIr.offset + headerSize
          val field = fieldIr.name
-         val type = if (fieldIr.type is ArrayN) "${(fieldIr.type as ArrayN).structType.name}[${(fieldIr.type as ArrayN).length}]" else fieldIr.type.name
+         val type = if (fieldIr.type is ArrayN && fieldIr.type.isStruct) "${fieldIr.type.structType.name}[${fieldIr.type.length}]" else fieldIr.type.name
          val sbeType = fieldIr.type.sbeName
          val size = fieldIr.type.size.toString()
          val value = when {
             fieldIr.type is ArrayN -> "$field.contentToString()"
-            fieldIr.type is ByteArrayN || fieldIr.type is ShortArrayN || fieldIr.type is IntArrayN || fieldIr.type is LongArrayN || fieldIr.type is FloatArrayN || fieldIr.type is DoubleArrayN || fieldIr.type is CharArrayN -> "$field.contentToString()"
             else -> "$field.toString()"
          }
          addCsvRow(offset, field, type, sbeType, size, value)
