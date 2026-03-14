@@ -17,10 +17,6 @@ internal data class ByteArrayN(val length: Int) : IR.Leaf {
 
    override fun decodeField(decoder: String, field: String) = "$decoder.get$field()"
 
-   override fun howToEncodeFromSource(encoder: String, field: String, instance: String) = "$encoder.put${field.replaceFirstChar { it.uppercase() }}($instance.$field, 0, $length)"
-
-   override fun howToDecodeIntoTarget(decoder: String, field: String, instance: String) = "$decoder.get${field.replaceFirstChar { it.uppercase() }}($instance.$field, 0, $length)"
-
    override fun fwSetter(encoder: String, field: String) = "$encoder.put${field.replaceFirstChar { it.uppercase() }}($field, 0, $length)"
 
    override fun fwGetter(decoder: String, field: String) = "ByteArray($length).also { $decoder.get${field.replaceFirstChar { it.uppercase() }}(it, 0, $length) }"

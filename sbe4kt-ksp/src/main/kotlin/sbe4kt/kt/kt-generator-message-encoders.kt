@@ -7,26 +7,15 @@ import sbe4kt.util.trimTemplate
 
 internal fun generateEncodersSection(message: Message): String {
    val className = message.name
-   val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
-   val fieldsSbeOrder = message.fields.sortedBy { it.sbeOrder }
-
-   val encoderName = className.replaceFirstChar { it.lowercase() } + "Encoder"
-   val decoderName = className.replaceFirstChar { it.lowercase() } + "Decoder"
-   val sourceVarName = "source"
-   val targetVarName = "target"
-
    val sizeConstName = className.sbeSizeConstant()
-   val totalSize = message.blockLength
 
+   val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
    val defaultParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.defaultValue}," }
    val randomParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.randomValue}," }
    val args = fieldsDecOrder.joinToString(", ") { it.name }
 
-   val encoderBody = fieldsSbeOrder.joinToString("\n") { it.type.howToEncodeFromSource(encoderName, it.name, "source") }
-   val decoderBody = fieldsSbeOrder.joinToString("\n") { it.type.howToDecodeIntoTarget(decoderName, it.name, "target") }
-
    return """
-      |const val $sizeConstName = MessageHeaderEncoder.ENCODED_LENGTH + $totalSize
+      |const val $sizeConstName = MessageHeaderEncoder.ENCODED_LENGTH + ${message.blockLength}
       |
       |@JvmOverloads
       |fun new$className(
@@ -42,12 +31,12 @@ internal fun generateEncodersSection(message: Message): String {
       |   return $className($args)
       |}
       |
-      |fun encode$className($sourceVarName: $className, buffer: MutableDirectBuffer, offset: Int = 0): Int {
-      |   return ${className}RW(buffer, offset).encodeFrom($sourceVarName)
+      |fun encode$className(source: $className, buffer: MutableDirectBuffer, offset: Int = 0): Int {
+      |   return ${className}RW(buffer, offset).encodeFrom(source)
       |}
       |
-      |fun decode$className($targetVarName: $className, buffer: MutableDirectBuffer, offset: Int = 0): Int {
-      |   return ${className}RW(buffer, offset).decodeInto($targetVarName)
+      |fun decode$className(target: $className, buffer: MutableDirectBuffer, offset: Int = 0): Int {
+      |   return ${className}RW(buffer, offset).decodeInto(target)
       |}
       |
       |fun $className.encodeTo(buffer: MutableDirectBuffer, offset: Int = 0): Int = encode$className(this, buffer, offset)

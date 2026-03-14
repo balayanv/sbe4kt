@@ -63,29 +63,7 @@ internal data class Struct(
          add(importBase)
          val pkg = importBase.substringBeforeLast('.')
          add("${pkg}.${name}RW")
-         add("${pkg}.${name}R")
-         add("${pkg}.${name}W")
       }
-   }
-
-   override fun howToEncodeFromSource(encoder: String, field: String, instance: String): String {
-      val sb = StringBuilder()
-      sb.appendLine("val $field = $encoder.$field()")
-      for (it in fields) {
-         val value = it.type.convertToSbe("$instance.$field.${it.name}")
-         sb.appendLine("$field.${it.name}($value)")
-      }
-      return sb.removeSuffix("\n").toString()
-   }
-
-   override fun howToDecodeIntoTarget(decoder: String, field: String, instance: String): String {
-      val sb = StringBuilder()
-      sb.appendLine("val $field = $decoder.$field()")
-      for (it in fields) {
-         val decodedValue = it.type.convertFromSbe("$field.${it.name}()")
-         sb.appendLine("$instance.$field.${it.name} = $decodedValue")
-      }
-      return sb.removeSuffix("\n").toString()
    }
 
    override fun fwSetter(encoder: String, field: String): String {

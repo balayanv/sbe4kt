@@ -143,27 +143,6 @@ internal data class Message(
       }
    }
 
-   // When used as a field in another message, handle as nested
-   override fun howToEncodeFromSource(encoder: String, field: String, instance: String): String {
-      // encoder is "signalEncoder" or "xyEncoder" etc -> "SignalEncoder" or "XYEncoder"
-      val encoderClass = encoder.replaceFirstChar { it.uppercase() }
-      return "encode${name}($instance.$field, buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${encoderClass}.${field}EncodingOffset())"
-   }
-
-   override fun howToDecodeIntoTarget(decoder: String, field: String, instance: String): String {
-      // decoder is "signalDecoder" or "xyDecoder" etc -> "SignalDecoder" or "XYDecoder"
-      val decoderClass = decoder.replaceFirstChar { it.uppercase() }
-      return "decode${name}($instance.$field, buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${decoderClass}.${field}EncodingOffset())"
-   }
-
-   override fun fwSetter(encoder: String, field: String): String {
-      return "${field}FW.encodeFrom($field)"
-   }
-
-   override fun fwGetter(decoder: String, field: String): String {
-      return "new${name}().also { ${field}FW.decodeInto(it) }"
-   }
-
    fun sourceFiles(): Array<KSFile> {
       // todo cleanup
       val dependentFiles = mutableSetOf(declaration.containingFile!!)

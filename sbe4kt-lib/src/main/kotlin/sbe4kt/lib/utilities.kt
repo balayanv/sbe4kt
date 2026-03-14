@@ -21,17 +21,10 @@ class CSV(
       var metadata: String = ""
    )
 
-   fun info(info: String) = apply {
-      val row = Row(metadata = "info")
-      row.values.add(info)
-      rows.add(0, row)
-   }
-
    fun addHeader(vararg header: String) = apply {
       val row = Row(metadata = "header")
       row.values.addAll(header)
-      val insertIndex = if (rows.firstOrNull()?.metadata == "info") 1 else 0
-      rows.add(insertIndex, row)
+      rows.add(0, row)
    }
 
    fun addRow(vararg value: String, metadata: String = "") = apply {
@@ -43,8 +36,7 @@ class CSV(
 
    fun print() {
       val headerRow = rows.firstOrNull { it.metadata == "header" } ?: return
-      val infoRow = rows.firstOrNull { it.metadata == "info" }
-      val dataRows = rows.filter { it.metadata != "header" && it.metadata != "info" }
+      val dataRows = rows.filter { it.metadata != "header" }
 
       val columnWidths = IntArray(headerRow.values.size) { index ->
          var max = headerRow.values[index].length
@@ -53,47 +45,16 @@ class CSV(
                max = maxOf(max, row.values[index].length)
             }
          }
-         max + 2 // Add some padding
+         max + 2
       }
 
-      // Print info string as one big row before header if present
-      if (infoRow != null) {
-         val infoText = infoRow.values.firstOrNull() ?: ""
-         val totalWidth = columnWidths.sum() + (columnWidths.size - 1)
-
-         // Print info top border
-         print("┌")
-         print("─".repeat(totalWidth))
-         print("┐")
-         println()
-
-         // Print info row
-         print("│")
-         val infoMaxWidth = totalWidth - 2
-         val infoPadding = maxOf(0, totalWidth - infoText.length - 2)
-         print(" ")
-         print(infoText.take(infoMaxWidth))
-         print(" ".repeat(infoPadding))
-         print(" ")
-         print("│")
-         println()
-
-         // Print info separator
-         print("├")
-         columnWidths.forEachIndexed { index, width ->
-            print("─".repeat(width))
-            if (index < columnWidths.size - 1) print("┬") else print("┤")
-         }
-         println()
-      } else {
-         // Print top border without info
-         print("┌")
-         columnWidths.forEachIndexed { index, width ->
-            print("─".repeat(width))
-            if (index < columnWidths.size - 1) print("┬") else print("┐")
-         }
-         println()
+      // Print top border
+      print("┌")
+      columnWidths.forEachIndexed { index, width ->
+         print("─".repeat(width))
+         if (index < columnWidths.size - 1) print("┬") else print("┐")
       }
+      println()
 
       // Print header
       print("│")

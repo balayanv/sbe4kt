@@ -38,8 +38,6 @@ internal sealed interface IR {
       fun convertToSbe(value: String) = value
       fun convertFromSbe(value: String) = value
 
-      fun howToEncodeFromSource(encoder: String, field: String, instance: String) = encodeField(encoder, field, convertToSbe("$instance.$field"))
-      fun howToDecodeIntoTarget(decoder: String, field: String, instance: String) = assignToInstanceField(instance, field, convertFromSbe(decodeField(decoder, field)))
 
       fun assignToInstanceField(instance: String, field: String, value: String) = "$instance.$field = $value"
 
