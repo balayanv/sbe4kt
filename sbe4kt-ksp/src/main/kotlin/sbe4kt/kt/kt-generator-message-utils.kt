@@ -112,7 +112,8 @@ private fun generateVarLayoutRows(message: Message): String {
    val varFields = message.fields.filter { it.type.size < 0 }.sortedBy { it.sbeOrder }
    if (varFields.isEmpty()) return ""
 
-   return varFields.joinToString("\n") { fieldIr ->
+   return varFields.mapIndexed { index, fieldIr ->
+      val isLast = index == varFields.lastIndex
       when (fieldIr.type) {
          is RepeatingGroup -> {
             val struct = fieldIr.type.elementType as Struct
@@ -123,16 +124,16 @@ private fun generateVarLayoutRows(message: Message): String {
             "   val count = $field.size\n" +
             "   val groupSize = 4 + count * $blockLen\n" +
             "   result.add(SbeLayoutRow(varOffset, \"$field\", \"$typeName\", \"group\", groupSize, \"count=\$count\"))\n" +
-            "   varOffset += groupSize\n" +
-            "}"
+            if (!isLast) "   varOffset += groupSize\n}" else "}"
          }
          else -> {
             val field = fieldIr.name
             val type = fieldIr.type.name
             val sbeType = fieldIr.type.sbeName
             val value = if (fieldIr.type.name == "String") field else "$field.toString()"
-            "result.add(SbeLayoutRow(varOffset, \"$field\", \"$type\", \"$sbeType\", $field.length, $value))\nvarOffset += $field.length"
+            "result.add(SbeLayoutRow(varOffset, \"$field\", \"$type\", \"$sbeType\", $field.length, $value))" +
+            if (!isLast) "\nvarOffset += $field.length" else ""
          }
       }
-   }
+   }.joinToString("\n")
 }

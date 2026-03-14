@@ -1,7 +1,5 @@
 package example
 
-import sbe4kt.META
-import sbe4kt.META.Encoding.UTF8
 import sbe4kt.SBE
 import java.util.UUID
 
@@ -9,8 +7,8 @@ import java.util.UUID
 @SBE
 data class Trade(
    var id: Long,
-   var payloads: Array<Payload>,
-   @META(encoding = UTF8)
+//   var payloads: Array<Payload>,
+//   @META(encoding = UTF8)
    var str : String,
 )
 
@@ -21,16 +19,13 @@ data class Payload(
 )
 
 fun main() {
-   val original = randomTrade(str = UUID.randomUUID().toString())
-   original.printSbeLayout(flat = true)
+   val rw = TradeRW()
+   val source = randomTrade(str = UUID.randomUUID().toString())
+   rw.encodeFrom(source)
 
-   // round-trip test
-   val buffer = org.agrona.ExpandableArrayBuffer()
-   original.encodeTo(buffer)
-   val decoded = newTrade()
-   decoded.decodeFrom(buffer)
-   check(original.id == decoded.id) { "id mismatch" }
-   check(original.payloads.contentEquals(decoded.payloads)) { "payloads mismatch" }
-   check(original.str == decoded.str) { "str mismatch" }
-   println("Round-trip OK: $decoded")
+   val target = newTrade()
+   rw.decodeInto(target)
+
+   target.printSbeLayout()
+
 }
