@@ -8,23 +8,19 @@ import sbe4kt.util.trimTemplate
 
 internal fun generateUtilsSection(message: Message): String {
    val className = message.name
-   val sizeConstName = className.sbeSizeConstant()
    val rows = generateLayoutRows(message)
    val hasComposites = message.fields.any { it.type is Composite }
-
-   val headerValue = "\${${className}Encoder.BLOCK_LENGTH}|\${${className}Encoder.TEMPLATE_ID}|\${${className}Encoder.SCHEMA_ID}|\${${className}Encoder.SCHEMA_VERSION}"
 
    val flatExpansion = if (hasComposites) {
       val compositeFields = message.fields.filter { it.type is Composite }.sortedBy { it.sbeOrder }
       val branches = compositeFields.joinToString("\n") {
-         val offset = it.offset + 8
-         "\"${it.name}\" -> result.addAll(${it.name}.sbeLayout(startOffset = row.offset))"
+         "\"${it.name}\" -> {\n   result.addAll(${it.name}.sbeLayout(startOffset = row.offset))\n   result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n}"
       }
       "fun $className.printSbeLayout(flat: Boolean = false) {\n" +
       "   if (flat) {\n" +
       "      val result = mutableListOf<SbeLayoutRow>()\n" +
       "      for (row in sbeLayout()) {\n" +
-      "         if (row.metadata == \"composite\") {\n" +
+      "         if (row.metadata == \"root\") {\n" +
       "            result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
       "            result.add(row)\n" +
       "            result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
@@ -79,7 +75,7 @@ private fun generateLayoutRows(message: Message): String {
       val type = fieldIr.type.name
       val sbeType = fieldIr.type.sbeName
       val size = fieldIr.type.size
-      val metadata = if (fieldIr.type is Composite) """, metadata = "composite"""" else ""
+      val metadata = if (fieldIr.type is Composite) """, metadata = "root"""" else ""
       val value = if (fieldIr.type.name == "String") field else "$field.toString()"
       result.add("""SbeLayoutRow(startOffset + $offset, "$field", "$type", "$sbeType", $size, $value$metadata),""")
    }
