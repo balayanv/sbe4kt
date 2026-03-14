@@ -74,14 +74,14 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
                val expectedOffset = prevField.offset + prevField.type.size
                val paddingSize = field.offset - expectedOffset
                if (paddingSize > 0) {
-                  appendLine("""SbeLayoutRow($expectedOffset, "[PADDING]", "", "", $paddingSize, ""),""")
+                  appendLine("""SbeLayoutRow(startOffset + $expectedOffset, "[PADDING]", "", "", $paddingSize, ""),""")
                }
             }
             val typeName = field.type.name
             val sbeName = field.type.sbeName
             val size = field.type.size
             val value = if (field.type.name == "String") field.name else "${field.name}.toString()"
-            appendLine("""SbeLayoutRow(${field.offset}, "${field.name}", "$typeName", "$sbeName", $size, $value),""")
+            appendLine("""SbeLayoutRow(startOffset + ${field.offset}, "${field.name}", "$typeName", "$sbeName", $size, $value),""")
          }
       }.trimEnd()
 
@@ -141,7 +141,7 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |   }
       |}
       |
-      |internal fun ${struct.name}.sbeLayout() : List<SbeLayoutRow> {
+      |internal fun ${struct.name}.sbeLayout(startOffset: Int = 0) : List<SbeLayoutRow> {
       |   return listOf(
       |${layoutRows.indent(6)}
       |   )
@@ -191,14 +191,14 @@ internal fun KSP.generateComposite(struct: Composite): String {
             val expectedOffset = prevField.offset + prevField.type.size
             val paddingSize = field.offset - expectedOffset
             if (paddingSize > 0) {
-               appendLine("""SbeLayoutRow($expectedOffset, "[PADDING]", "", "", $paddingSize, ""),""")
+               appendLine("""SbeLayoutRow(startOffset + $expectedOffset, "[PADDING]", "", "", $paddingSize, ""),""")
             }
          }
          val typeName = field.type.name
          val sbeName = field.type.sbeName
          val size = field.type.size
          val value = if (field.type.name == "String") field.name else "${field.name}.toString()"
-         appendLine("""SbeLayoutRow(${field.offset}, "${field.name}", "$typeName", "$sbeName", $size, $value),""")
+         appendLine("""SbeLayoutRow(startOffset + ${field.offset}, "${field.name}", "$typeName", "$sbeName", $size, $value),""")
       }
    }.trimEnd()
 
@@ -249,7 +249,7 @@ internal fun KSP.generateComposite(struct: Composite): String {
       |   }
       |}
       |
-      |internal fun ${struct.name}.sbeLayout() : List<SbeLayoutRow> {
+      |internal fun ${struct.name}.sbeLayout(startOffset: Int = 0) : List<SbeLayoutRow> {
       |   return listOf(
       |${printLayoutRows.indent(6)}
       |   )

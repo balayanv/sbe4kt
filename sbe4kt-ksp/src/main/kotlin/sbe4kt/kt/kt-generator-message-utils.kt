@@ -18,13 +18,15 @@ internal fun generateUtilsSection(message: Message): String {
       val compositeFields = message.fields.filter { it.type is Composite }.sortedBy { it.sbeOrder }
       val branches = compositeFields.joinToString("\n") {
          val offset = it.offset + 8
-         "\"${it.name}\" -> result.addAll(${it.name}.sbeLayout().map { r -> r.copy(offset = r.offset + $offset) })"
+         "\"${it.name}\" -> result.addAll(${it.name}.sbeLayout(startOffset = row.offset))"
       }
       "fun $className.printSbeLayout(flat: Boolean = false) {\n" +
       "   if (flat) {\n" +
       "      val result = mutableListOf<SbeLayoutRow>()\n" +
       "      for (row in sbeLayout()) {\n" +
       "         if (row.metadata == \"composite\") {\n" +
+      "            result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
+      "            result.add(row)\n" +
       "            result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
       "            when (row.field) {\n" +
       branches.indent(15) + "\n" +
@@ -45,9 +47,9 @@ internal fun generateUtilsSection(message: Message): String {
    }
 
    return $$"""
-      |internal fun $$className.sbeLayout() : List<SbeLayoutRow> {
+      |internal fun $$className.sbeLayout(startOffset: Int = 0) : List<SbeLayoutRow> {
       |   return listOf(
-      |      SbeLayoutRow(0, "[HEADER]", "Header", "", 8, "${$${className}Encoder.BLOCK_LENGTH}|${$${className}Encoder.TEMPLATE_ID}|${$${className}Encoder.SCHEMA_ID}|${$${className}Encoder.SCHEMA_VERSION}"),
+      |      SbeLayoutRow(startOffset + 0, "[HEADER]", "Header", "", 8, "${$${className}Encoder.BLOCK_LENGTH}|${$${className}Encoder.TEMPLATE_ID}|${$${className}Encoder.SCHEMA_ID}|${$${className}Encoder.SCHEMA_VERSION}"),
       |$${rows.indent(6)}
       |   )
       |}
@@ -68,7 +70,7 @@ private fun generateLayoutRows(message: Message): String {
          val paddingSize = fieldIr.offset - expectedOffset
          if (paddingSize > 0) {
             val offset = expectedOffset + headerSize
-            result.add("""SbeLayoutRow($offset, "[PADDING]", "", "", $paddingSize, ""),""")
+            result.add("""SbeLayoutRow(startOffset + $offset, "[PADDING]", "", "", $paddingSize, ""),""")
          }
       }
 
@@ -79,7 +81,7 @@ private fun generateLayoutRows(message: Message): String {
       val size = fieldIr.type.size
       val metadata = if (fieldIr.type is Composite) """, metadata = "composite"""" else ""
       val value = if (fieldIr.type.name == "String") field else "$field.toString()"
-      result.add("""SbeLayoutRow($offset, "$field", "$type", "$sbeType", $size, $value$metadata),""")
+      result.add("""SbeLayoutRow(startOffset + $offset, "$field", "$type", "$sbeType", $size, $value$metadata),""")
    }
 
    if (message.usePadding && sortedFields.isNotEmpty()) {
@@ -87,7 +89,7 @@ private fun generateLayoutRows(message: Message): String {
       val finalPadding = message.blockLength - (lastField.offset + lastField.type.size)
       if (finalPadding > 0) {
          val offset = lastField.offset + lastField.type.size + headerSize
-         result.add("""SbeLayoutRow($offset, "[PADDING]", "", "", $finalPadding, ""),""")
+         result.add("""SbeLayoutRow(startOffset + $offset, "[PADDING]", "", "", $finalPadding, ""),""")
       }
    }
 

@@ -21,5 +21,5 @@ data class Payload(
 
 fun main() {
    val randomTrade = randomTrade()
-   randomTrade.printSbeLayout()
+   randomTrade.printSbeLayout(flat = true)
 }
