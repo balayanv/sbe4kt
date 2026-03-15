@@ -47,7 +47,7 @@ internal sealed interface IR {
 }
 
 internal data class Schema(
-   val annotatedTypes: List<KSClassDeclaration>,
+   val annotatedTypes: kotlin.collections.List<KSClassDeclaration>,
    val previousSchema: PreviousSchema? = null,
 ) {
    val structs: ArrayList<Struct> = ArrayList()
@@ -130,6 +130,7 @@ internal data class Schema(
             byteArraySizes.add(type.maxSize)
             type.allowedTypes.forEach { extractSpecialTypes(it) }
          }
+         is RepeatingGroup -> extractSpecialTypes(type.elementType)
          else -> {} // primitives, structs don't contain special types to extract
       }
    }
@@ -148,7 +149,7 @@ internal data class Field(
    val name: String = prop.simpleName.asString().requireNotReserveWord()
    val type: IR.Leaf = prop.toLeaf()
    val isNullable: Boolean = prop.type.resolve().isMarkedNullable
-   val tags: List<String> = prop.metaAnnotation().tags()
+   val tags: kotlin.collections.List<String> = prop.metaAnnotation().tags()
    val removeAfter: Int = prop.metaAnnotation().removeAfter()
 
    var id: Int = -1
@@ -204,6 +205,20 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
          val encoding = meta.encoding()
          return StringN(size, encoding)
       }
+   }
+
+   // Array<T> → ArrayField (SBE repeating group)
+   if (declaration.qualifiedName() == "kotlin.Array") {
+      val typeArg = resolvedType.arguments.first().type!!.resolve().declaration
+      val elementType = recursiveResolveLeaf(typeArg)
+      return Array(elementType)
+   }
+
+   // List<T> → ListField (SBE repeating group)
+   if (declaration.qualifiedName() == "kotlin.collections.List") {
+      val typeArg = resolvedType.arguments.first().type!!.resolve().declaration
+      val elementType = recursiveResolveLeaf(typeArg)
+      return List(elementType)
    }
 
    // Variable-length string: String with encoding annotation but no size

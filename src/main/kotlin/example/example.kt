@@ -9,9 +9,7 @@ import java.util.UUID
 @SBE
 data class Trade(
    var id: Long,
-   var payload: Payload,
-
-   // TODO add support for variable length string, use best practicies of sbe
+   var payloads: Array<Payload>,
    @META(encoding = UTF8)
    var str : String,
 )
@@ -23,6 +21,16 @@ data class Payload(
 )
 
 fun main() {
-   val randomTrade = randomTrade(str = UUID.randomUUID().toString())
-   randomTrade.printSbeLayout(flat = true)
+   val original = randomTrade(str = UUID.randomUUID().toString())
+   original.printSbeLayout(flat = true)
+
+   // round-trip test
+   val buffer = org.agrona.ExpandableArrayBuffer()
+   original.encodeTo(buffer)
+   val decoded = newTrade()
+   decoded.decodeFrom(buffer)
+   check(original.id == decoded.id) { "id mismatch" }
+   check(original.payloads.contentEquals(decoded.payloads)) { "payloads mismatch" }
+   check(original.str == decoded.str) { "str mismatch" }
+   println("Round-trip OK: $decoded")
 }

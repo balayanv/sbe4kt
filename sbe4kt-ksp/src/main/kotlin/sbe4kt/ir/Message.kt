@@ -14,6 +14,7 @@ import sbe4kt.util.packageName
 import sbe4kt.util.sbeAnnotation
 import sbe4kt.util.simpleName
 import sbe4kt.util.usePadding
+import kotlin.Array
 
 internal data class Message(
    val declaration: KSClassDeclaration,
@@ -78,13 +79,14 @@ internal data class Message(
          currentOffset
       }
 
-      // Variable fields after — no fixed offset, ordered by declaration
-      fields
-         .filter { it.type.size < 0 }
-         .forEach { field ->
-            field.offset = -1
-            field.sbeOrder = sbeOrder++
-         }
+      // Variable fields after — groups first (SBE requirement), then data
+      val varFields = fields.filter { it.type.size < 0 }
+      val groupFields = varFields.filter { it.type is RepeatingGroup }
+      val dataFields = varFields.filter { it.type !is RepeatingGroup }
+      (groupFields + dataFields).forEach { field ->
+         field.offset = -1
+         field.sbeOrder = sbeOrder++
+      }
    }
 
    private fun initWithPreviousSchema(prev: PrevMessage) {
@@ -163,6 +165,7 @@ internal data class Message(
          when (val type = field.type) {
             is Struct -> type.declaration.containingFile?.let { dependentFiles.add(it) }
             is Message -> type.declaration.containingFile?.let { dependentFiles.add(it) }
+            is RepeatingGroup -> (type.elementType as Struct).declaration.containingFile?.let { dependentFiles.add(it) }
             else -> {} // Primitive types don't have source files
          }
       }
@@ -196,6 +199,7 @@ internal data class Message(
       imports.add("org.agrona.DirectBuffer")
       imports.add("org.agrona.MutableDirectBuffer")
       imports.add("org.agrona.concurrent.UnsafeBuffer")
+      if (hasVariableFields) imports.add("org.agrona.ExpandableArrayBuffer")
       imports.add("sbe4kt.MessageHeaderEncoder")
       imports.add("sbe4kt.MessageHeaderDecoder")
       imports.add("sbe4kt.lib.SbeLayoutRow")

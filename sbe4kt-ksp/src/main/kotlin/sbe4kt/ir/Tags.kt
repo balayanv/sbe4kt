@@ -1,5 +1,7 @@
 package sbe4kt.ir
 
+import kotlin.collections.List
+
 internal data class Tags(
    val valueType: Value,
    val tagNames: List<String>,

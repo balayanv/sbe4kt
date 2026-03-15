@@ -2,7 +2,6 @@ package sbe4kt.migration
 
 import sbe4kt.ir.Enum
 import sbe4kt.ir.Schema
-import sbe4kt.ir.Struct
 
 internal data class SchemaEvolution(
    val newVersion: Int,

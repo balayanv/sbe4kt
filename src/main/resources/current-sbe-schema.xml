@@ -19,6 +19,11 @@
          <type name='varData' primitiveType='uint8' length='0' characterEncoding='UTF-8'/>
       </composite>
 
+      <composite name='groupSizeEncoding'>
+         <type name='blockLength' primitiveType='uint16'/>
+         <type name='numInGroup' primitiveType='uint16'/>
+      </composite>
+
       <composite name='Payload'>
          <type name='f1' primitiveType='int32'/>
          <type name='f2' primitiveType='int32'/>
@@ -28,7 +33,10 @@
 
    <sbe:message name='Trade' id='1' description='sbe4kt generated sbe schema for Trade'>
       <field name='id' id='1' type='int64'/>
-      <field name='payload' id='2' type='Payload'/>
+      <group name='payloads' id='2' dimensionType='groupSizeEncoding'>
+         <field name='f1' id='1' type='int32'/>
+         <field name='f2' id='2' type='int32'/>
+      </group>
       <data name='str' id='3' type='varStringEncoding'/>
    </sbe:message>
    

@@ -1,10 +1,10 @@
 package sbe4kt.kt
 
 import sbe4kt.ir.Composite
+import sbe4kt.ir.RepeatingGroup
 import sbe4kt.ir.Message
+import sbe4kt.ir.Struct
 import sbe4kt.util.indent
-import sbe4kt.util.sbeSizeConstant
-import sbe4kt.util.trimTemplate
 
 internal fun generateUtilsSection(message: Message): String {
    val className = message.name
@@ -113,10 +113,26 @@ private fun generateVarLayoutRows(message: Message): String {
    if (varFields.isEmpty()) return ""
 
    return varFields.joinToString("\n") { fieldIr ->
-      val field = fieldIr.name
-      val type = fieldIr.type.name
-      val sbeType = fieldIr.type.sbeName
-      val value = if (fieldIr.type.name == "String") field else "$field.toString()"
-      "result.add(SbeLayoutRow(varOffset, \"$field\", \"$type\", \"$sbeType\", $field.length, $value))\nvarOffset += $field.length"
+      when (fieldIr.type) {
+         is RepeatingGroup -> {
+            val struct = fieldIr.type.elementType as Struct
+            val blockLen = struct.encodedLength
+            val field = fieldIr.name
+            val typeName = fieldIr.type.name
+            "run {\n" +
+            "   val count = $field.size\n" +
+            "   val groupSize = 4 + count * $blockLen\n" +
+            "   result.add(SbeLayoutRow(varOffset, \"$field\", \"$typeName\", \"group\", groupSize, \"count=\$count\"))\n" +
+            "   varOffset += groupSize\n" +
+            "}"
+         }
+         else -> {
+            val field = fieldIr.name
+            val type = fieldIr.type.name
+            val sbeType = fieldIr.type.sbeName
+            val value = if (fieldIr.type.name == "String") field else "$field.toString()"
+            "result.add(SbeLayoutRow(varOffset, \"$field\", \"$type\", \"$sbeType\", $field.length, $value))\nvarOffset += $field.length"
+         }
+      }
    }
 }

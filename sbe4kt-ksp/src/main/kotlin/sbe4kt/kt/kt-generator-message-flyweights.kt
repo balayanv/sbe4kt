@@ -1,8 +1,12 @@
 package sbe4kt.kt
 
+import sbe4kt.ir.Array
 import sbe4kt.ir.Composite
 import sbe4kt.ir.Field
+import sbe4kt.ir.List
 import sbe4kt.ir.Message
+import sbe4kt.ir.RepeatingGroup
+import sbe4kt.ir.Struct
 import sbe4kt.ir.Union
 import sbe4kt.util.indent
 import sbe4kt.util.sbeSizeConstant
@@ -17,7 +21,7 @@ internal fun generateFlyweightsSection(message: Message): String {
    val compositFields = fieldsDecOrder.filter { it.type is Composite }
    val nestedMessageFields = fieldsDecOrder.filter { it.type is Message }
    val unionFields = fieldsDecOrder.filter { it.type is Union }
-   val simpleFields = fieldsDecOrder.filter { it.type !is Composite && it.type !is Message && it.type !is Union }
+   val simpleFields = fieldsDecOrder.filter { it.type !is Composite && it.type !is Message && it.type !is Union && it.type !is RepeatingGroup }
 
    // Composite FW fields
    val fwFieldDecls = compositFields.joinToString("\n") { "private val ${it.name}FW : ${it.type.name}RW" }
@@ -36,6 +40,9 @@ internal fun generateFlyweightsSection(message: Message): String {
       "fun ${it.name}() = ${it.type.fwGetter("decoder", it.name)}\n" +
       "fun ${it.name}(${it.name}: ${it.type.name}) = apply { ${it.type.fwSetter("encoder", it.name)} }"
    }
+
+   val groupFields = fieldsDecOrder.filter { it.type is RepeatingGroup }
+   val groupFieldAccessors = generateGroupFwAccessors(groupFields)
 
    val unionFwGetters = generateUnionFwGetters(unionFields, className)
    val unionFwSetters = generateUnionFwSetters(unionFields, className)
@@ -57,6 +64,7 @@ internal fun generateFlyweightsSection(message: Message): String {
                append("}")
             }
          }
+         is RepeatingGroup -> "${it.name}(source.${it.name})"
          else -> "${it.name}(source.${it.name})"
       }
    }
@@ -70,6 +78,7 @@ internal fun generateFlyweightsSection(message: Message): String {
             val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${it.name}EncodingOffset()"
             "target.${it.name} = ${it.name}()"
          }
+         is RepeatingGroup -> "target.${it.name} = ${it.name}()"
          else -> "target.${it.name} = ${it.name}()"
       }
    }
@@ -101,7 +110,7 @@ internal fun generateFlyweightsSection(message: Message): String {
       |${compositeFwInits.indent(6)}
       |   }
       |
-      |   constructor() : this(${if (message.hasVariableFields) "org.agrona.ExpandableArrayBuffer()" else "UnsafeBuffer(ByteArray($sizeConstName))"}, 0)
+      |   constructor() : this(${if (message.hasVariableFields) "ExpandableArrayBuffer()" else "UnsafeBuffer(ByteArray($sizeConstName))"}, 0)
       |
       |   constructor(buffer: MutableDirectBuffer, offset: Int){
       |      this.encoder = ${className}Encoder()
@@ -118,6 +127,8 @@ internal fun generateFlyweightsSection(message: Message): String {
       |${compositeFwAccessors.indent(3)}
       |
       |${simpleFieldAccessors.indent(3)}
+      |
+      |${groupFieldAccessors.indent(3)}
       |${unionFwGetters.indent(3)}
       |${unionFwSetters.indent(3)}
       |
@@ -136,7 +147,51 @@ internal fun generateFlyweightsSection(message: Message): String {
       |""".trimTemplate()
 }
 
-private fun generateUnionFwGetters(unionFields: List<Field>, className: String): String {
+private fun generateGroupFwAccessors(groupFields: kotlin.collections.List<Field>): String {
+   if (groupFields.isEmpty()) return ""
+   return groupFields.joinToString("\n\n") { field ->
+      val struct = (field.type as RepeatingGroup).elementType as Struct
+      val fieldDecodes = struct.fields.sortedBy { it.sbeOrder }.joinToString(", ") { f ->
+         "${f.name} = ${f.type.convertFromSbe("grpDec.${f.name}()")}"
+      }
+
+      val getter = when (field.type) {
+         is Array -> buildString {
+            appendLine("fun ${field.name}(): ${field.type.name} {")
+            appendLine("   val grpDec = decoder.${field.name}()")
+            appendLine("   return Array(grpDec.count()) {")
+            appendLine("      grpDec.next()")
+            appendLine("      ${struct.name}($fieldDecodes)")
+            appendLine("   }")
+            append("}")
+         }
+         is List -> buildString {
+            appendLine("fun ${field.name}(): ${field.type.name} = buildList {")
+            appendLine("   for (grpDec in decoder.${field.name}()) {")
+            appendLine("      add(${struct.name}($fieldDecodes))")
+            appendLine("   }")
+            append("}")
+         }
+         else -> throw IllegalArgumentException("Unexpected RepeatingGroup subtype: ${field.type::class}")
+      }
+
+      val setter = buildString {
+         appendLine("fun ${field.name}(${field.name}: ${field.type.name}) = apply {")
+         appendLine("   val grp = encoder.${field.name}Count(${field.name}.size)")
+         appendLine("   for (item in ${field.name}) {")
+         appendLine("      grp.next()")
+         for (f in struct.fields.sortedBy { it.sbeOrder }) {
+            appendLine("      grp.${f.name}(${f.type.convertToSbe("item.${f.name}")})")
+         }
+         appendLine("   }")
+         append("}")
+      }
+
+      "$getter\n$setter"
+   }
+}
+
+private fun generateUnionFwGetters(unionFields: kotlin.collections.List<Field>, className: String): String {
    if (unionFields.isEmpty()) return ""
    return unionFields.joinToString("\n") { field ->
       val union = field.type as Union
@@ -156,7 +211,7 @@ private fun generateUnionFwGetters(unionFields: List<Field>, className: String):
    }
 }
 
-private fun generateUnionFwSetters(unionFields: List<Field>, className: String): String {
+private fun generateUnionFwSetters(unionFields: kotlin.collections.List<Field>, className: String): String {
    if (unionFields.isEmpty()) return ""
    return unionFields.joinToString("\n") { field ->
       val union = field.type as Union

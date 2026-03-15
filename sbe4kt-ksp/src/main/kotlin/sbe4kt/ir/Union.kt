@@ -1,5 +1,7 @@
 package sbe4kt.ir
 
+import kotlin.collections.List
+
 internal data class Union(
    val allowedTypes: List<Message>,
    val fieldName: String,

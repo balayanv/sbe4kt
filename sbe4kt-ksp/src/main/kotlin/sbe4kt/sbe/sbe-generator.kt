@@ -4,6 +4,7 @@ import sbe4kt.KSP
 import sbe4kt.ir.ByteArrayN
 import sbe4kt.ir.Enum
 import sbe4kt.ir.IR
+import sbe4kt.ir.RepeatingGroup
 import sbe4kt.ir.Message
 import sbe4kt.ir.StringN
 import sbe4kt.ir.Struct
@@ -37,6 +38,14 @@ internal fun KSP.generateSbe() {
       "</composite>"
    }
 
+   val hasGroups = ir.messages.any { msg -> msg.fields.any { it.type is RepeatingGroup } }
+   val groupSizeComposite = if (hasGroups) {
+      "<composite name='groupSizeEncoding'>\n" +
+      "   <type name='blockLength' primitiveType='uint16'/>\n" +
+      "   <type name='numInGroup' primitiveType='uint16'/>\n" +
+      "</composite>"
+   } else ""
+
    val structs = ir.structs.joinToString("\n") { generateCompositeType(it) }
    val activeMessages = ir.messages.joinToString("\n") { generateMessageBody(it, version) }
    val deprecatedMessages = ir.deprecatedMessages.joinToString("\n") { generateDeprecatedMessageBody(it, version) }
@@ -64,6 +73,8 @@ internal fun KSP.generateSbe() {
       |${stringTypes.indent(6)}
       |
       |${varStringComposites.indent(6)}
+      |
+      |${groupSizeComposite.indent(6)}
       |
       |${structs.indent(6)}
       |   </types>
@@ -116,8 +127,8 @@ private fun generateMessageBody(message: Message, schemaVersion: Int): String {
       val usePadding: Boolean,
    )
 
-   // current fields
-   val currentEntries = message.fields.map { field ->
+   // current fields (excluding group fields, handled separately)
+   val currentEntries = message.fields.filter { it.type !is RepeatingGroup }.map { field ->
       val sinceVersion = when {
          field.name in evolution -> schemaVersion
          message.previousMessage != null -> {
@@ -192,7 +203,18 @@ private fun generateMessageBody(message: Message, schemaVersion: Int): String {
       "<data name='${entry.name}' id='${entry.id}' type='${entry.type}'/>"
    }
 
-   val xml = listOf(fixedXml, varDataXml).filter { it.isNotBlank() }.joinToString("\n")
+   // Group fields → <group> elements (after <field>, before <data>)
+   val groupFields = message.fields.filter { it.type is RepeatingGroup }.sortedBy { it.sbeOrder }
+   val groupXml = groupFields.joinToString("\n") { field ->
+      val group = field.type as RepeatingGroup
+      val struct = group.elementType as Struct
+      val innerFields = struct.fields.sortedBy { it.sbeOrder }.joinToString("\n") { f ->
+         "   <field name='${f.name}' id='${f.id}' type='${f.type.sbeName}'/>"
+      }
+      "<group name='${field.name}' id='${field.id}' dimensionType='groupSizeEncoding'>\n$innerFields\n</group>"
+   }
+
+   val xml = listOf(fixedXml, groupXml, varDataXml).filter { it.isNotBlank() }.joinToString("\n")
 
    val blockLengthAttribute = if (message.usePadding && message.blockLength > 0) {
       " blockLength='${message.blockLength}'"
