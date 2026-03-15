@@ -15,7 +15,7 @@ internal fun generateEncodersSection(message: Message): String {
    val args = fieldsDecOrder.joinToString(", ") { it.name }
 
    return """
-      |const val $sizeConstName = MessageHeaderEncoder.ENCODED_LENGTH + ${message.blockLength}
+      |const val $sizeConstName = ${if (message.hasVariableFields) "-1" else "MessageHeaderEncoder.ENCODED_LENGTH + ${message.blockLength}"}
       |
       |@JvmOverloads
       |fun new$className(

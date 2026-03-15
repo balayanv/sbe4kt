@@ -206,6 +206,12 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
       }
    }
 
+   // Variable-length string: String with encoding annotation but no size
+   if (declaration.qualifiedName() == "kotlin.String" || declaration.qualifiedName() == "kotlin.CharSequence") {
+      val encoding = meta.encoding()
+      return VarStringN(encoding)
+   }
+
    val tags = meta.tags()
    if (tags.isNotEmpty()) {
       val resolved = recursiveResolveLeaf(declaration)

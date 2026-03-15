@@ -136,10 +136,9 @@ fun List<SbeLayoutRow>.toCSV(): CSV {
    val csv = CSV()
    csv.addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
    for (row in this) {
-      if (row.metadata == "separator") {
-         csv.separator()
-      } else {
-         csv.addRow(
+      when (row.metadata) {
+         "separator" -> csv.separator()
+         else -> csv.addRow(
             row.offset.toString(),
             row.field,
             row.type,
@@ -150,7 +149,7 @@ fun List<SbeLayoutRow>.toCSV(): CSV {
          )
       }
    }
-   val endOffset = if (isEmpty()) 0 else last().let { it.offset + it.size }
+   val endOffset = if (isEmpty()) 0 else filter { it.metadata != "separator" }.maxOfOrNull { it.offset + it.size } ?: 0
    csv.addRow(endOffset.toString(), "[END]", "", "", "", "")
    return csv
 }

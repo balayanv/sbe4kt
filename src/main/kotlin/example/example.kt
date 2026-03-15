@@ -1,7 +1,9 @@
 package example
 
 import sbe4kt.META
+import sbe4kt.META.Encoding.UTF8
 import sbe4kt.SBE
+import java.util.UUID
 
 
 @SBE
@@ -9,7 +11,8 @@ data class Trade(
    var id: Long,
    var payload: Payload,
 
-   @META(size = 12)
+   // TODO add support for variable length string, use best practicies of sbe
+   @META(encoding = UTF8)
    var str : String,
 )
 
@@ -20,6 +23,6 @@ data class Payload(
 )
 
 fun main() {
-   val randomTrade = randomTrade()
+   val randomTrade = randomTrade(str = UUID.randomUUID().toString())
    randomTrade.printSbeLayout(flat = true)
 }

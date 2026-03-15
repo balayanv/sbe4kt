@@ -27,6 +27,7 @@ internal data class Message(
    var blockLength: Int = -1
    val fields = declaration.getFieldIRs()
    val deprecatedFields: MutableList<PrevField> = mutableListOf()
+   val hasVariableFields: Boolean get() = fields.any { it.type.size < 0 }
 
    override val name = declaration.simpleName()
 
@@ -54,15 +55,19 @@ internal data class Message(
 
    private fun initFresh() {
       var currentOffset = 0
+      var sbeOrder = 1
+
+      // Fixed fields first — sorted largest-to-smallest for optimal alignment
       fields
+         .filter { it.type.size >= 0 }
          .sortedByDescending { it.type.size }
-         .forEachIndexed { index, field ->
+         .forEach { field ->
             if (usePadding) {
                val padding = (8 - (currentOffset % 8)) % 8
                currentOffset += padding
             }
             field.offset = currentOffset
-            field.sbeOrder = index + 1
+            field.sbeOrder = sbeOrder++
             currentOffset += field.type.size
          }
 
@@ -72,6 +77,14 @@ internal data class Message(
       } else {
          currentOffset
       }
+
+      // Variable fields after — no fixed offset, ordered by declaration
+      fields
+         .filter { it.type.size < 0 }
+         .forEach { field ->
+            field.offset = -1
+            field.sbeOrder = sbeOrder++
+         }
    }
 
    private fun initWithPreviousSchema(prev: PrevMessage) {

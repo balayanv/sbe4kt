@@ -16,9 +16,7 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       add("sbe4kt.lib.SbeLayoutRow")
       add("sbe4kt.lib.toCSV")
       add("kotlin.random.Random")
-      struct.fields.forEach { field ->
-         addAll(field.type.imports)
-      }
+      struct.fields.forEach { addAll(it.type.imports) }
    }
    val importStatements = imports.joinToString("\n") { "import $it" }
 

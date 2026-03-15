@@ -8,6 +8,8 @@ import sbe4kt.ir.Message
 import sbe4kt.ir.StringN
 import sbe4kt.ir.Struct
 import sbe4kt.ir.Union
+import sbe4kt.ir.VarStringN
+import sbe4kt.META
 import sbe4kt.migration.PrevMessage
 import sbe4kt.util.indent
 import sbe4kt.util.trimTemplate
@@ -20,6 +22,21 @@ internal fun KSP.generateSbe() {
    val schemaFile = File(resourcesDir, "sbe-schema.xml")
    val byteArrayTypes = ir.byteArraySizes.joinToString("\n") { generateByteArrayType(it) }
    val stringTypes = ir.fixedStrings.joinToString("\n") { generateStringType(it) }
+
+   // Variable-length string encoding composites
+   val usedVarEncodings = ir.messages.flatMap { it.fields.map { f -> f.type } }
+      .filterIsInstance<VarStringN>()
+      .map { it.encoding }
+      .toSet()
+   val varStringComposites = usedVarEncodings.joinToString("\n") { encoding ->
+      val charEnc = if (encoding == META.Encoding.UTF8) "UTF-8" else "US-ASCII"
+      val name = if (encoding == META.Encoding.UTF8) "varStringEncoding" else "varAsciiEncoding"
+      "<composite name='$name'>\n" +
+      "   <type name='length' primitiveType='uint32' maxValue='1073741824'/>\n" +
+      "   <type name='varData' primitiveType='uint8' length='0' characterEncoding='$charEnc'/>\n" +
+      "</composite>"
+   }
+
    val structs = ir.structs.joinToString("\n") { generateCompositeType(it) }
    val activeMessages = ir.messages.joinToString("\n") { generateMessageBody(it, version) }
    val deprecatedMessages = ir.deprecatedMessages.joinToString("\n") { generateDeprecatedMessageBody(it, version) }
@@ -45,6 +62,8 @@ internal fun KSP.generateSbe() {
       |${byteArrayTypes.indent(6)}
       |
       |${stringTypes.indent(6)}
+      |
+      |${varStringComposites.indent(6)}
       |
       |${structs.indent(6)}
       |   </types>
@@ -156,9 +175,11 @@ private fun generateMessageBody(message: Message, schemaVersion: Int): String {
       )
    }
 
-   val allFields = (currentEntries + deprecatedEntries).sortedBy { it.sbeOrder }
+   val allEntries = (currentEntries + deprecatedEntries).sortedBy { it.sbeOrder }
+   val fixedEntries = allEntries.filter { it.offset == null || it.offset >= 0 }
+   val varDataEntries = allEntries.filter { it.offset != null && it.offset < 0 }
 
-   val xml = allFields.joinToString("\n") { entry ->
+   val fixedXml = fixedEntries.joinToString("\n") { entry ->
       val offsetAttr = if (entry.usePadding && entry.offset != null && entry.offset >= 0) " offset='${entry.offset}'" else ""
       val presenceAttr = if (entry.presence != null) " presence='${entry.presence}'" else ""
       val sinceAttr = if (entry.sinceVersion != null && entry.sinceVersion > 0) " sinceVersion='${entry.sinceVersion}'" else ""
@@ -166,6 +187,12 @@ private fun generateMessageBody(message: Message, schemaVersion: Int): String {
       val descAttr = if (entry.description != null) " description='${entry.description}'" else ""
       "<field name='${entry.name}' id='${entry.id}' type='${entry.type}'$offsetAttr$presenceAttr$sinceAttr$deprecatedAttr$descAttr/>"
    }
+
+   val varDataXml = varDataEntries.joinToString("\n") { entry ->
+      "<data name='${entry.name}' id='${entry.id}' type='${entry.type}'/>"
+   }
+
+   val xml = listOf(fixedXml, varDataXml).filter { it.isNotBlank() }.joinToString("\n")
 
    val blockLengthAttribute = if (message.usePadding && message.blockLength > 0) {
       " blockLength='${message.blockLength}'"

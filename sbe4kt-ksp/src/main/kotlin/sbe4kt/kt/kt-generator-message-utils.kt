@@ -8,10 +8,36 @@ import sbe4kt.util.trimTemplate
 
 internal fun generateUtilsSection(message: Message): String {
    val className = message.name
-   val rows = generateLayoutRows(message)
    val hasComposites = message.fields.any { it.type is Composite }
+   val hasVarFields = message.hasVariableFields
+   val fixedRows = generateFixedLayoutRows(message)
+   val varRows = generateVarLayoutRows(message)
 
-   val flatExpansion = if (hasComposites) {
+   val headerValue = "\${${className}Encoder.BLOCK_LENGTH}|\${${className}Encoder.TEMPLATE_ID}|\${${className}Encoder.SCHEMA_ID}|\${${className}Encoder.SCHEMA_VERSION}"
+   val fixedBlockEnd = message.blockLength + 8
+
+   // --- sbeLayout ---
+   val sbeLayoutMethod = if (hasVarFields) {
+      "internal fun $className.sbeLayout(startOffset: Int = 0) : List<SbeLayoutRow> {\n" +
+      "   val result = mutableListOf(\n" +
+      "      SbeLayoutRow(startOffset + 0, \"[HEADER]\", \"Header\", \"\", 8, \"$headerValue\"),\n" +
+      fixedRows.indent(6) + "\n" +
+      "   )\n" +
+      "   var varOffset = startOffset + $fixedBlockEnd\n" +
+      varRows.indent(3) + "\n" +
+      "   return result\n" +
+      "}"
+   } else {
+      "internal fun $className.sbeLayout(startOffset: Int = 0) : List<SbeLayoutRow> {\n" +
+      "   return listOf(\n" +
+      "      SbeLayoutRow(startOffset + 0, \"[HEADER]\", \"Header\", \"\", 8, \"$headerValue\"),\n" +
+      fixedRows.indent(6) + "\n" +
+      "   )\n" +
+      "}"
+   }
+
+   // --- printSbeLayout ---
+   val printMethod = if (hasComposites) {
       val compositeFields = message.fields.filter { it.type is Composite }.sortedBy { it.sbeOrder }
       val branches = compositeFields.joinToString("\n") {
          "\"${it.name}\" -> {\n   result.addAll(${it.name}.sbeLayout(startOffset = row.offset))\n   result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n}"
@@ -42,22 +68,12 @@ internal fun generateUtilsSection(message: Message): String {
       "}"
    }
 
-   return $$"""
-      |internal fun $$className.sbeLayout(startOffset: Int = 0) : List<SbeLayoutRow> {
-      |   return listOf(
-      |      SbeLayoutRow(startOffset + 0, "[HEADER]", "Header", "", 8, "${$${className}Encoder.BLOCK_LENGTH}|${$${className}Encoder.TEMPLATE_ID}|${$${className}Encoder.SCHEMA_ID}|${$${className}Encoder.SCHEMA_VERSION}"),
-      |$${rows.indent(6)}
-      |   )
-      |}
-      |
-      |$$flatExpansion
-      |""".trimTemplate()
+   return "$sbeLayoutMethod\n\n$printMethod\n"
 }
 
-private fun generateLayoutRows(message: Message): String {
+private fun generateFixedLayoutRows(message: Message): String {
    val result = mutableListOf<String>()
-
-   val sortedFields = message.fields.sortedBy { it.sbeOrder }
+   val sortedFields = message.fields.filter { it.type.size >= 0 }.sortedBy { it.sbeOrder }
    val headerSize = 8
 
    for ((index, fieldIr) in sortedFields.withIndex()) {
@@ -90,4 +106,17 @@ private fun generateLayoutRows(message: Message): String {
    }
 
    return result.joinToString("\n")
+}
+
+private fun generateVarLayoutRows(message: Message): String {
+   val varFields = message.fields.filter { it.type.size < 0 }.sortedBy { it.sbeOrder }
+   if (varFields.isEmpty()) return ""
+
+   return varFields.joinToString("\n") { fieldIr ->
+      val field = fieldIr.name
+      val type = fieldIr.type.name
+      val sbeType = fieldIr.type.sbeName
+      val value = if (fieldIr.type.name == "String") field else "$field.toString()"
+      "result.add(SbeLayoutRow(varOffset, \"$field\", \"$type\", \"$sbeType\", $field.length, $value))\nvarOffset += $field.length"
+   }
 }

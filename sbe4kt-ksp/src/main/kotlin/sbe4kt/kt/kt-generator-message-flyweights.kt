@@ -101,7 +101,7 @@ internal fun generateFlyweightsSection(message: Message): String {
       |${compositeFwInits.indent(6)}
       |   }
       |
-      |   constructor() : this(UnsafeBuffer(ByteArray($sizeConstName)), 0)
+      |   constructor() : this(${if (message.hasVariableFields) "org.agrona.ExpandableArrayBuffer()" else "UnsafeBuffer(ByteArray($sizeConstName))"}, 0)
       |
       |   constructor(buffer: MutableDirectBuffer, offset: Int){
       |      this.encoder = ${className}Encoder()
