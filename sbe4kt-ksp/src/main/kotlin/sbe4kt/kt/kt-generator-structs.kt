@@ -50,20 +50,7 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |}
       |""".trimTemplate()
    } else {
-      // Non-composites get full flyweights
-      val fieldAccessors = struct.fields.joinToString("\n\n") {
-         "fun ${it.name}() = ${it.type.convertFromSbe("decoder.${it.name}()")}\n" +
-         "fun ${it.name}(${it.name}: ${it.type.name}) = apply { encoder.${it.name}(${it.type.convertToSbe(it.name)}) }"
-      }
-
-      val encodeBody = struct.fields.joinToString("\n") { "encoder.${it.name}(${it.type.convertToSbe("source.${it.name}")})" }
-      val decodeBody = struct.fields.joinToString("\n") { "target.${it.name} = ${it.type.convertFromSbe("decoder.${it.name}()")}" }
-
       val sortedFields = struct.fields.sortedBy { it.sbeOrder }
-      val encodedLength = if (sortedFields.isEmpty()) 0 else {
-         val lastField = sortedFields.last()
-         lastField.offset + lastField.type.size
-      }
 
       val layoutRows = buildString {
          for ((index, field) in sortedFields.withIndex()) {
@@ -83,11 +70,15 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
          }
       }.trimEnd()
 
+      val readerClass = generateStructReader(struct)
+      val writerClass = generateStructWriter(struct)
+
       """
       |@file:Suppress("unused")
       |
       |package $packageName
       |
+      |import org.agrona.DirectBuffer
       |import org.agrona.MutableDirectBuffer
       |$importStatements
       |import sbe4kt.${struct.name}Encoder
@@ -107,37 +98,9 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
       |   return ${struct.name}($args)
       |}
       |
-      |class ${struct.name}RW {
-      |   val encoder: ${struct.name}Encoder
-      |   val decoder: ${struct.name}Decoder
+      |${readerClass}
       |
-      |   constructor(encoder: ${struct.name}Encoder, decoder: ${struct.name}Decoder){
-      |      this.encoder = encoder
-      |      this.decoder = decoder
-      |   }
-      |
-      |   constructor(buffer: MutableDirectBuffer, offset: Int){
-      |      this.encoder = ${struct.name}Encoder()
-      |      this.decoder = ${struct.name}Decoder()
-      |   }
-      |
-      |   fun wrap(buffer: MutableDirectBuffer, offset: Int) = apply {
-      |      encoder.wrap(buffer, offset)
-      |      decoder.wrap(buffer, offset)
-      |   }
-      |
-      |${fieldAccessors.indent(3)}
-      |
-      |   fun encodeFrom(source: ${struct.name}): Int {
-      |${encodeBody.indent(6)}
-      |      return encoder.encodedLength()
-      |   }
-      |
-      |   fun decodeInto(target: ${struct.name} = new${struct.name}()): Int {
-      |${decodeBody.indent(6)}
-      |      return decoder.encodedLength()
-      |   }
-      |}
+      |${writerClass}
       |
       |internal fun ${struct.name}.sbeLayout(startOffset: Int = 0) : List<SbeLayoutRow> {
       |   return listOf(
@@ -160,27 +123,77 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
    file.bufferedWriter().use { it.write(content) }
 }
 
-internal fun KSP.generateComposite(struct: Composite): String {
-   val fieldAccessors = struct.fields.joinToString("\n\n") {
-      "fun ${it.name}() = ${it.type.convertFromSbe("decoder.${it.name}()")}\n" +
-      "fun ${it.name}(${it.name}: ${it.type.name}) = apply { encoder.${it.name}(${it.type.convertToSbe(it.name)}) }"
+private fun generateStructReader(struct: Struct): String {
+   val fieldGetters = struct.fields.joinToString("\n\n") {
+      "fun ${it.name}() = ${it.type.convertFromSbe("decoder.${it.name}()")}"
    }
-
-   val encodeBody = struct.fields.joinToString("\n") { "encoder.${it.name}(${it.type.convertToSbe("source.${it.name}")})" }
    val decodeBody = struct.fields.joinToString("\n") { "target.${it.name} = ${it.type.convertFromSbe("decoder.${it.name}()")}" }
 
+   return """
+      |class ${struct.name}R {
+      |   val decoder: ${struct.name}Decoder
+      |
+      |   constructor(decoder: ${struct.name}Decoder) {
+      |      this.decoder = decoder
+      |   }
+      |
+      |   constructor(buffer: DirectBuffer, offset: Int) {
+      |      this.decoder = ${struct.name}Decoder()
+      |      wrap(buffer, offset)
+      |   }
+      |
+      |   fun wrap(buffer: DirectBuffer, offset: Int) = apply {
+      |      decoder.wrap(buffer, offset)
+      |   }
+      |
+      |${fieldGetters.indent(3)}
+      |
+      |   fun decodeInto(target: ${struct.name} = new${struct.name}()): Int {
+      |${decodeBody.indent(6)}
+      |      return decoder.encodedLength()
+      |   }
+      |}""".trimTemplate()
+}
+
+private fun generateStructWriter(struct: Struct): String {
+   val fieldSetters = struct.fields.joinToString("\n\n") {
+      "fun ${it.name}(${it.name}: ${it.type.name}) = apply { encoder.${it.name}(${it.type.convertToSbe(it.name)}) }"
+   }
+   val encodeBody = struct.fields.joinToString("\n") { "encoder.${it.name}(${it.type.convertToSbe("source.${it.name}")})" }
+
+   return """
+      |class ${struct.name}W {
+      |   val encoder: ${struct.name}Encoder
+      |
+      |   constructor(encoder: ${struct.name}Encoder) {
+      |      this.encoder = encoder
+      |   }
+      |
+      |   constructor(buffer: MutableDirectBuffer, offset: Int) {
+      |      this.encoder = ${struct.name}Encoder()
+      |      wrap(buffer, offset)
+      |   }
+      |
+      |   fun wrap(buffer: MutableDirectBuffer, offset: Int) = apply {
+      |      encoder.wrap(buffer, offset)
+      |   }
+      |
+      |${fieldSetters.indent(3)}
+      |
+      |   fun encodeFrom(source: ${struct.name}): Int {
+      |${encodeBody.indent(6)}
+      |      return encoder.encodedLength()
+      |   }
+      |}""".trimTemplate()
+}
+
+internal fun KSP.generateComposite(struct: Composite): String {
    val fieldsDecOrder = struct.fields.sortedBy { it.declarationOrder }
    val defaultParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.defaultValue}," }
    val randomParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.randomValue}," }
    val args = fieldsDecOrder.joinToString(", ") { it.name }
 
    val sortedFields = struct.fields.sortedBy { it.sbeOrder }
-
-   // Calculate actual encoded length (last field offset + size)
-   val encodedLength = if (sortedFields.isEmpty()) 0 else {
-      val lastField = sortedFields.last()
-      lastField.offset + lastField.type.size
-   }
 
    val printLayoutRows = buildString {
       for ((index, field) in sortedFields.withIndex()) {
@@ -200,6 +213,9 @@ internal fun KSP.generateComposite(struct: Composite): String {
       }
    }.trimEnd()
 
+   val readerClass = generateStructReader(struct)
+   val writerClass = generateStructWriter(struct)
+
    return """
       |@JvmOverloads
       |fun new${struct.name}(
@@ -215,37 +231,9 @@ internal fun KSP.generateComposite(struct: Composite): String {
       |   return ${struct.name}($args)
       |}
       |
-      |class ${struct.name}RW {
-      |   val encoder: ${struct.name}Encoder
-      |   val decoder: ${struct.name}Decoder
+      |${readerClass}
       |
-      |   constructor(encoder: ${struct.name}Encoder, decoder: ${struct.name}Decoder){
-      |      this.encoder = encoder
-      |      this.decoder = decoder
-      |   }
-      |
-      |   constructor(buffer: MutableDirectBuffer, offset: Int){
-      |      this.encoder = ${struct.name}Encoder()
-      |      this.decoder = ${struct.name}Decoder()
-      |   }
-      |
-      |   fun wrap(buffer: MutableDirectBuffer, offset: Int) = apply {
-      |      encoder.wrap(buffer, offset)
-      |      decoder.wrap(buffer, offset)
-      |   }
-      |
-      |${fieldAccessors.indent(3)}
-      |
-      |   fun encodeFrom(source: ${struct.name}): Int {
-      |${encodeBody.indent(6)}
-      |      return encoder.encodedLength()
-      |   }
-      |
-      |   fun decodeInto(target: ${struct.name} = new${struct.name}()): Int {
-      |${decodeBody.indent(6)}
-      |      return decoder.encodedLength()
-      |   }
-      |}
+      |${writerClass}
       |
       |internal fun ${struct.name}.sbeLayout(startOffset: Int = 0) : List<SbeLayoutRow> {
       |   return listOf(

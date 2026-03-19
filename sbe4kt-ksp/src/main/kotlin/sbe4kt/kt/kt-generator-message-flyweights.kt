@@ -13,41 +13,120 @@ import sbe4kt.util.sbeSizeConstant
 import sbe4kt.util.trimTemplate
 
 internal fun generateFlyweightsSection(message: Message): String {
+   val reader = generateReaderFlyweight(message)
+   val writer = generateWriterFlyweight(message)
+   return "$reader\n\n$writer"
+}
+
+private fun generateReaderFlyweight(message: Message): String {
    val className = message.name
    val sizeConstName = className.sbeSizeConstant()
 
    val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
    val fieldsSbeOrder = message.fields.sortedBy { it.sbeOrder }
-   val compositFields = fieldsDecOrder.filter { it.type is Composite }
-   val nestedMessageFields = fieldsDecOrder.filter { it.type is Message }
-   val unionFields = fieldsDecOrder.filter { it.type is Union }
+   val compositeFields = fieldsDecOrder.filter { it.type is Composite }
    val simpleFields = fieldsDecOrder.filter { it.type !is Composite && it.type !is Message && it.type !is Union && it.type !is RepeatingGroup }
+   val groupFields = fieldsDecOrder.filter { it.type is RepeatingGroup }
+   val unionFields = fieldsDecOrder.filter { it.type is Union }
 
-   // Composite FW fields
-   val fwFieldDecls = compositFields.joinToString("\n") { "private val ${it.name}FW : ${it.type.name}RW" }
-
-   // Composite accessor: re-wraps encoder/decoder on access
-   val compositeFwAccessors = compositFields.joinToString("\n\n") {
-      "fun ${it.name}(): ${it.type.name}RW {\n" +
-      "   encoder.${it.name}()\n" +
+   val compositeFwDecls = compositeFields.joinToString("\n") { "private val ${it.name}FW: ${it.type.name}R" }
+   val compositeFwInits = compositeFields.joinToString("\n") { "${it.name}FW = ${it.type.name}R(decoder.${it.name}())" }
+   val compositeFwAccessors = compositeFields.joinToString("\n\n") {
+      "fun ${it.name}(): ${it.type.name}R {\n" +
       "   decoder.${it.name}()\n" +
       "   return ${it.name}FW\n" +
       "}"
    }
 
-   // Simple field accessors: getter+setter grouped per field
-   val simpleFieldAccessors = simpleFields.joinToString("\n\n") {
-      "fun ${it.name}() = ${it.type.fwGetter("decoder", it.name)}\n" +
+   val simpleFieldGetters = simpleFields.joinToString("\n\n") {
+      "fun ${it.name}() = ${it.type.fwGetter("decoder", it.name)}"
+   }
+
+   val groupFieldGetters = generateGroupFwGetters(groupFields)
+   val unionGetters = generateUnionFwGetters(unionFields, className, "decoder")
+
+   val decodeIntoBody = fieldsSbeOrder.joinToString("\n") {
+      when (it.type) {
+         is Composite -> "${it.name}().decodeInto(target.${it.name})"
+         is Message -> "decode${it.type.name}(target.${it.name}, decoder.buffer(), decoder.offset() + ${className}Encoder.${it.name}EncodingOffset())"
+         is Union -> "target.${it.name} = ${it.name}()"
+         is RepeatingGroup -> "target.${it.name} = ${it.name}()"
+         else -> "target.${it.name} = ${it.name}()"
+      }
+   }
+
+   return """
+      |class ${className}R{
+      |   private val headerDecoder = MessageHeaderDecoder()
+      |   private val decoder : ${className}Decoder
+      |${if (compositeFwDecls.isNotEmpty()) "\n${compositeFwDecls.indent(3)}" else ""}
+      |
+      |   fun blockLength() = headerDecoder.blockLength()
+      |   fun templateId() = headerDecoder.templateId()
+      |   fun schemaId() = headerDecoder.schemaId()
+      |   fun version() = headerDecoder.version()
+      |
+      |   constructor(encoder: ${className}Encoder, decoder: ${className}Decoder){
+      |      this.decoder = decoder
+      |${compositeFwInits.indent(6)}
+      |   }
+      |
+      |   constructor() : this(${if (message.hasVariableFields) "ExpandableArrayBuffer()" else "UnsafeBuffer(ByteArray($sizeConstName))"}, 0)
+      |
+      |   constructor(buffer: DirectBuffer, offset: Int){
+      |      this.decoder = ${className}Decoder()
+      |      wrap(buffer, offset)
+      |${compositeFwInits.indent(6)}
+      |   }
+      |
+      |   fun wrap(buffer: DirectBuffer, offset: Int) = apply {
+      |      decoder.wrapAndApplyHeader(buffer, offset, headerDecoder)
+      |   }
+      |
+      |${compositeFwAccessors.indent(3)}
+      |
+      |${simpleFieldGetters.indent(3)}
+      |
+      |${groupFieldGetters.indent(3)}
+      |${unionGetters.indent(3)}
+      |
+      |   fun decodeInto(target: $className = new$className()): Int {
+      |${decodeIntoBody.indent(6)}
+      |      return MessageHeaderDecoder.ENCODED_LENGTH + decoder.encodedLength()
+      |   }
+      |
+      |   fun size() = $sizeConstName
+      |}
+      |""".trimTemplate()
+}
+
+private fun generateWriterFlyweight(message: Message): String {
+   val className = message.name
+   val sizeConstName = className.sbeSizeConstant()
+
+   val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
+   val fieldsSbeOrder = message.fields.sortedBy { it.sbeOrder }
+   val compositeFields = fieldsDecOrder.filter { it.type is Composite }
+   val simpleFields = fieldsDecOrder.filter { it.type !is Composite && it.type !is Message && it.type !is Union && it.type !is RepeatingGroup }
+   val groupFields = fieldsDecOrder.filter { it.type is RepeatingGroup }
+   val unionFields = fieldsDecOrder.filter { it.type is Union }
+
+   val compositeFwDecls = compositeFields.joinToString("\n") { "private val ${it.name}FW: ${it.type.name}W" }
+   val compositeFwInits = compositeFields.joinToString("\n") { "${it.name}FW = ${it.type.name}W(encoder.${it.name}())" }
+   val compositeFwAccessors = compositeFields.joinToString("\n\n") {
+      "fun ${it.name}(): ${it.type.name}W {\n" +
+      "   encoder.${it.name}()\n" +
+      "   return ${it.name}FW\n" +
+      "}"
+   }
+
+   val simpleFieldSetters = simpleFields.joinToString("\n\n") {
       "fun ${it.name}(${it.name}: ${it.type.name}) = apply { ${it.type.fwSetter("encoder", it.name)} }"
    }
 
-   val groupFields = fieldsDecOrder.filter { it.type is RepeatingGroup }
-   val groupFieldAccessors = generateGroupFwAccessors(groupFields)
+   val groupFieldSetters = generateGroupFwSetters(groupFields)
+   val unionSetters = generateUnionFwSetters(unionFields, className)
 
-   val unionFwGetters = generateUnionFwGetters(unionFields, className)
-   val unionFwSetters = generateUnionFwSetters(unionFields, className)
-
-   // encodeFrom body: delegates to own methods
    val encodeFromBody = fieldsSbeOrder.joinToString("\n") {
       when (it.type) {
          is Composite -> "${it.name}().encodeFrom(source.${it.name})"
@@ -69,44 +148,14 @@ internal fun generateFlyweightsSection(message: Message): String {
       }
    }
 
-   // decodeInto body: delegates to own methods
-   val decodeIntoBody = fieldsSbeOrder.joinToString("\n") {
-      when (it.type) {
-         is Composite -> "${it.name}().decodeInto(target.${it.name})"
-         is Message -> "decode${it.type.name}(target.${it.name}, encoder.buffer(), encoder.offset() + ${className}Encoder.${it.name}EncodingOffset())"
-         is Union -> {
-            val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${it.name}EncodingOffset()"
-            "target.${it.name} = ${it.name}()"
-         }
-         is RepeatingGroup -> "target.${it.name} = ${it.name}()"
-         else -> "target.${it.name} = ${it.name}()"
-      }
-   }
-
-   // Nested message FW declarations
-   val nestedMessageFWDecls = nestedMessageFields.joinToString("\n") { "private val ${it.name}FW : ${it.type.name}RW" }
-   val nestedMessageFwGetters = nestedMessageFields.joinToString("\n") { "fun ${it.name}FW() = ${it.name}FW" }
-
-   // Constructor init for composite FWs
-   val compositeFwInits = compositFields.joinToString("\n") { "${it.name}FW = ${it.type.name}RW(encoder.${it.name}(), decoder.${it.name}())" }
-
    return """
-      |class ${className}RW{
+      |class ${className}W{
       |   private val headerEncoder = MessageHeaderEncoder()
-      |   private val headerDecoder = MessageHeaderDecoder()
-      |
       |   private val encoder : ${className}Encoder
-      |   private val decoder : ${className}Decoder
-      |${if (fwFieldDecls.isNotEmpty()) "\n${fwFieldDecls.indent(3)}" else ""}
-      |
-      |   fun blockLength() = headerDecoder.blockLength()
-      |   fun templateId() = headerDecoder.templateId()
-      |   fun schemaId() = headerDecoder.schemaId()
-      |   fun version() = headerDecoder.version()
+      |${if (compositeFwDecls.isNotEmpty()) "\n${compositeFwDecls.indent(3)}" else ""}
       |
       |   constructor(encoder: ${className}Encoder, decoder: ${className}Decoder){
       |      this.encoder = encoder
-      |      this.decoder = decoder
       |${compositeFwInits.indent(6)}
       |   }
       |
@@ -114,32 +163,24 @@ internal fun generateFlyweightsSection(message: Message): String {
       |
       |   constructor(buffer: MutableDirectBuffer, offset: Int){
       |      this.encoder = ${className}Encoder()
-      |      this.decoder = ${className}Decoder()
       |      wrap(buffer, offset)
       |${compositeFwInits.indent(6)}
       |   }
       |
       |   fun wrap(buffer: MutableDirectBuffer, offset: Int) = apply {
       |      encoder.wrapAndApplyHeader(buffer, offset, headerEncoder)
-      |      decoder.wrapAndApplyHeader(buffer, offset, headerDecoder)
       |   }
       |
       |${compositeFwAccessors.indent(3)}
       |
-      |${simpleFieldAccessors.indent(3)}
+      |${simpleFieldSetters.indent(3)}
       |
-      |${groupFieldAccessors.indent(3)}
-      |${unionFwGetters.indent(3)}
-      |${unionFwSetters.indent(3)}
+      |${groupFieldSetters.indent(3)}
+      |${unionSetters.indent(3)}
       |
       |   fun encodeFrom(source: $className) : Int {
       |${encodeFromBody.indent(6)}
       |      return MessageHeaderDecoder.ENCODED_LENGTH + encoder.encodedLength()
-      |   }
-      |
-      |   fun decodeInto(target: $className = new$className()): Int {
-      |${decodeIntoBody.indent(6)}
-      |      return MessageHeaderDecoder.ENCODED_LENGTH + decoder.encodedLength()
       |   }
       |
       |   fun size() = $sizeConstName
@@ -147,15 +188,14 @@ internal fun generateFlyweightsSection(message: Message): String {
       |""".trimTemplate()
 }
 
-private fun generateGroupFwAccessors(groupFields: kotlin.collections.List<Field>): String {
+private fun generateGroupFwGetters(groupFields: kotlin.collections.List<Field>): String {
    if (groupFields.isEmpty()) return ""
    return groupFields.joinToString("\n\n") { field ->
       val struct = (field.type as RepeatingGroup).elementType as Struct
       val fieldDecodes = struct.fields.sortedBy { it.sbeOrder }.joinToString(", ") { f ->
          "${f.name} = ${f.type.convertFromSbe("grpDec.${f.name}()")}"
       }
-
-      val getter = when (field.type) {
+      when (field.type) {
          is Array -> buildString {
             appendLine("fun ${field.name}(): ${field.type.name} {")
             appendLine("   val grpDec = decoder.${field.name}()")
@@ -174,8 +214,14 @@ private fun generateGroupFwAccessors(groupFields: kotlin.collections.List<Field>
          }
          else -> throw IllegalArgumentException("Unexpected RepeatingGroup subtype: ${field.type::class}")
       }
+   }
+}
 
-      val setter = buildString {
+private fun generateGroupFwSetters(groupFields: kotlin.collections.List<Field>): String {
+   if (groupFields.isEmpty()) return ""
+   return groupFields.joinToString("\n\n") { field ->
+      val struct = (field.type as RepeatingGroup).elementType as Struct
+      buildString {
          appendLine("fun ${field.name}(${field.name}: ${field.type.name}) = apply {")
          appendLine("   val grp = encoder.${field.name}Count(${field.name}.size)")
          appendLine("   for (item in ${field.name}) {")
@@ -186,23 +232,21 @@ private fun generateGroupFwAccessors(groupFields: kotlin.collections.List<Field>
          appendLine("   }")
          append("}")
       }
-
-      "$getter\n$setter"
    }
 }
 
-private fun generateUnionFwGetters(unionFields: kotlin.collections.List<Field>, className: String): String {
+private fun generateUnionFwGetters(unionFields: kotlin.collections.List<Field>, className: String, bufferSource: String): String {
    if (unionFields.isEmpty()) return ""
    return unionFields.joinToString("\n") { field ->
       val union = field.type as Union
-      val fieldOffset = "encoder.offset() + ${className}Encoder.${field.name}EncodingOffset()"
+      val fieldOffset = "$bufferSource.offset() + ${className}Encoder.${field.name}EncodingOffset()"
       buildString {
          appendLine("fun ${field.name}(): ${union.name} {")
          appendLine("   val ${field.name}Header = MessageHeaderDecoder()")
-         appendLine("   ${field.name}Header.wrap(encoder.buffer(), $fieldOffset)")
+         appendLine("   ${field.name}Header.wrap($bufferSource.buffer(), $fieldOffset)")
          appendLine("   return when (${field.name}Header.templateId()) {")
          for (type in union.allowedTypes) {
-            appendLine("      ${type.name}Encoder.TEMPLATE_ID -> new${type.name}().also { decode${type.name}(it, encoder.buffer(), $fieldOffset) }")
+            appendLine("      ${type.name}Encoder.TEMPLATE_ID -> new${type.name}().also { decode${type.name}(it, $bufferSource.buffer(), $fieldOffset) }")
          }
          appendLine("      else -> throw IllegalArgumentException(\"Unknown templateId in union field '${field.name}': \${${field.name}Header.templateId()}\")")
          appendLine("   }")

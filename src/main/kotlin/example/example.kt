@@ -7,25 +7,29 @@ import java.util.UUID
 @SBE
 data class Trade(
    var id: Long,
-//   var payloads: Array<Payload>,
+//   var payloads: Array<Int>,
 //   @META(encoding = UTF8)
-   var str : String,
+   var list : List<String>,
+//   var payload: Payload,
 )
 
 @SBE(isStruct = true)
+//@SBE
 data class Payload(
    var f1 : Int,
    var f2 : Int,
 )
 
 fun main() {
-   val rw = TradeRW()
-   val source = randomTrade(str = UUID.randomUUID().toString())
-   rw.encodeFrom(source)
+   val source = randomTrade()
+
+   val buffer = org.agrona.ExpandableArrayBuffer()
+   val bytesWritten = source.encodeTo(buffer)
+   println("bytesWritten : $bytesWritten")
 
    val target = newTrade()
-   rw.decodeInto(target)
+   val bytesRead = target.decodeFrom(buffer)
+   println("bytesRead : $bytesRead")
 
-   target.printSbeLayout()
-
+   target.printSbeLayout(flat = true)
 }

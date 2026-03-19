@@ -32,14 +32,14 @@ internal fun generateEncodersSection(message: Message): String {
       |}
       |
       |fun encode$className(source: $className, buffer: MutableDirectBuffer, offset: Int = 0): Int {
-      |   return ${className}RW(buffer, offset).encodeFrom(source)
+      |   return ${className}W(buffer, offset).encodeFrom(source)
       |}
       |
-      |fun decode$className(target: $className, buffer: MutableDirectBuffer, offset: Int = 0): Int {
-      |   return ${className}RW(buffer, offset).decodeInto(target)
+      |fun decode$className(target: $className, buffer: DirectBuffer, offset: Int = 0): Int {
+      |   return ${className}R(buffer, offset).decodeInto(target)
       |}
       |
       |fun $className.encodeTo(buffer: MutableDirectBuffer, offset: Int = 0): Int = encode$className(this, buffer, offset)
-      |fun $className.decodeFrom(buffer: MutableDirectBuffer, offset: Int = 0): Int = decode$className(this, buffer, offset)
+      |fun $className.decodeFrom(buffer: DirectBuffer, offset: Int = 0): Int = decode$className(this, buffer, offset)
       |""".trimTemplate()
 }
