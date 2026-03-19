@@ -9,7 +9,7 @@ data class Trade(
    var id: Long,
 //   var payloads: Array<Int>,
 //   @META(encoding = UTF8)
-   var list : List<String>,
+   var list : List<Float>,
 //   var payload: Payload,
 )
 
@@ -23,6 +23,7 @@ data class Payload(
 fun main() {
    val source = randomTrade()
 
+   println(source)
    val buffer = org.agrona.ExpandableArrayBuffer()
    val bytesWritten = source.encodeTo(buffer)
    println("bytesWritten : $bytesWritten")
@@ -31,5 +32,6 @@ fun main() {
    val bytesRead = target.decodeFrom(buffer)
    println("bytesRead : $bytesRead")
 
+   println(target)
    target.printSbeLayout(flat = true)
 }

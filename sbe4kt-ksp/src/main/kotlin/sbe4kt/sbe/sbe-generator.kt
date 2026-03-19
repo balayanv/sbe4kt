@@ -24,11 +24,14 @@ internal fun KSP.generateSbe() {
    val byteArrayTypes = ir.byteArraySizes.joinToString("\n") { generateByteArrayType(it) }
    val stringTypes = ir.fixedStrings.joinToString("\n") { generateStringType(it) }
 
-   // Variable-length string encoding composites
-   val usedVarEncodings = ir.messages.flatMap { it.fields.map { f -> f.type } }
-      .filterIsInstance<VarStringN>()
-      .map { it.encoding }
-      .toSet()
+   // Variable-length string encoding composites (from direct fields and group element types)
+   val usedVarEncodings = ir.messages.flatMap { it.fields.flatMap { f ->
+      when (val type = f.type) {
+         is VarStringN -> listOf(type.encoding)
+         is RepeatingGroup -> if (type.elementType is VarStringN) listOf((type.elementType as VarStringN).encoding) else emptyList()
+         else -> emptyList()
+      }
+   } }.toSet()
    val varStringComposites = usedVarEncodings.joinToString("\n") { encoding ->
       val charEnc = if (encoding == META.Encoding.UTF8) "UTF-8" else "US-ASCII"
       val name = if (encoding == META.Encoding.UTF8) "varStringEncoding" else "varAsciiEncoding"
@@ -207,11 +210,14 @@ private fun generateMessageBody(message: Message, schemaVersion: Int): String {
    val groupFields = message.fields.filter { it.type is RepeatingGroup }.sortedBy { it.sbeOrder }
    val groupXml = groupFields.joinToString("\n") { field ->
       val group = field.type as RepeatingGroup
-      val struct = group.elementType as Struct
-      val innerFields = struct.fields.sortedBy { it.sbeOrder }.joinToString("\n") { f ->
-         "   <field name='${f.name}' id='${f.id}' type='${f.type.sbeName}'/>"
+      val innerXml = when (val elemType = group.elementType) {
+         is Struct -> elemType.fields.sortedBy { it.sbeOrder }.joinToString("\n") { f ->
+            "   <field name='${f.name}' id='${f.id}' type='${f.type.sbeName}'/>"
+         }
+         is VarStringN -> "   <data name='value' id='1' type='${elemType.sbeName}'/>"
+         else -> "   <field name='value' id='1' type='${elemType.sbeName}'/>"
       }
-      "<group name='${field.name}' id='${field.id}' dimensionType='groupSizeEncoding'>\n$innerFields\n</group>"
+      "<group name='${field.name}' id='${field.id}' dimensionType='groupSizeEncoding'>\n$innerXml\n</group>"
    }
 
    val xml = listOf(fixedXml, groupXml, varDataXml).filter { it.isNotBlank() }.joinToString("\n")

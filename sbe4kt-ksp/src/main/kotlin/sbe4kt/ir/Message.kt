@@ -165,7 +165,7 @@ internal data class Message(
          when (val type = field.type) {
             is Struct -> type.declaration.containingFile?.let { dependentFiles.add(it) }
             is Message -> type.declaration.containingFile?.let { dependentFiles.add(it) }
-            is RepeatingGroup -> (type.elementType as Struct).declaration.containingFile?.let { dependentFiles.add(it) }
+            is RepeatingGroup -> (type.elementType as? Struct)?.declaration?.containingFile?.let { dependentFiles.add(it) }
             else -> {} // Primitive types don't have source files
          }
       }

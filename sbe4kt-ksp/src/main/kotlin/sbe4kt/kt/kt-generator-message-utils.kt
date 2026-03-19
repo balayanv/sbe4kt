@@ -4,6 +4,7 @@ import sbe4kt.ir.Composite
 import sbe4kt.ir.RepeatingGroup
 import sbe4kt.ir.Message
 import sbe4kt.ir.Struct
+import sbe4kt.ir.VarStringN
 import sbe4kt.util.indent
 
 internal fun generateUtilsSection(message: Message): String {
@@ -116,13 +117,17 @@ private fun generateVarLayoutRows(message: Message): String {
       val isLast = index == varFields.lastIndex
       when (fieldIr.type) {
          is RepeatingGroup -> {
-            val struct = fieldIr.type.elementType as Struct
-            val blockLen = struct.encodedLength
+            val elemType = fieldIr.type.elementType
             val field = fieldIr.name
             val typeName = fieldIr.type.name
+            val sizeExpr = when (elemType) {
+               is Struct -> "4 + count * ${elemType.encodedLength}"
+               is VarStringN -> "4 + $field.sumOf { 4 + it.length }"
+               else -> "4 + count * ${elemType.size}"
+            }
             "run {\n" +
             "   val count = $field.size\n" +
-            "   val groupSize = 4 + count * $blockLen\n" +
+            "   val groupSize = $sizeExpr\n" +
             "   result.add(SbeLayoutRow(varOffset, \"$field\", \"$typeName\", \"group\", groupSize, \"count=\$count\"))\n" +
             if (!isLast) "   varOffset += groupSize\n}" else "}"
          }

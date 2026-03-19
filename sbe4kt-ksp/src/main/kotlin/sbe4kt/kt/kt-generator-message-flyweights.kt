@@ -191,9 +191,15 @@ private fun generateWriterFlyweight(message: Message): String {
 private fun generateGroupFwGetters(groupFields: kotlin.collections.List<Field>): String {
    if (groupFields.isEmpty()) return ""
    return groupFields.joinToString("\n\n") { field ->
-      val struct = (field.type as RepeatingGroup).elementType as Struct
-      val fieldDecodes = struct.fields.sortedBy { it.sbeOrder }.joinToString(", ") { f ->
-         "${f.name} = ${f.type.convertFromSbe("grpDec.${f.name}()")}"
+      val elemType = (field.type as RepeatingGroup).elementType
+      val valueExpr = when (elemType) {
+         is Struct -> {
+            val fieldDecodes = elemType.fields.sortedBy { it.sbeOrder }.joinToString(", ") { f ->
+               "${f.name} = ${f.type.convertFromSbe("grpDec.${f.name}()")}"
+            }
+            "${elemType.name}($fieldDecodes)"
+         }
+         else -> elemType.convertFromSbe("grpDec.value()")
       }
       when (field.type) {
          is Array -> buildString {
@@ -201,14 +207,14 @@ private fun generateGroupFwGetters(groupFields: kotlin.collections.List<Field>):
             appendLine("   val grpDec = decoder.${field.name}()")
             appendLine("   return Array(grpDec.count()) {")
             appendLine("      grpDec.next()")
-            appendLine("      ${struct.name}($fieldDecodes)")
+            appendLine("      $valueExpr")
             appendLine("   }")
             append("}")
          }
          is List -> buildString {
             appendLine("fun ${field.name}(): ${field.type.name} = buildList {")
             appendLine("   for (grpDec in decoder.${field.name}()) {")
-            appendLine("      add(${struct.name}($fieldDecodes))")
+            appendLine("      add($valueExpr)")
             appendLine("   }")
             append("}")
          }
@@ -220,14 +226,19 @@ private fun generateGroupFwGetters(groupFields: kotlin.collections.List<Field>):
 private fun generateGroupFwSetters(groupFields: kotlin.collections.List<Field>): String {
    if (groupFields.isEmpty()) return ""
    return groupFields.joinToString("\n\n") { field ->
-      val struct = (field.type as RepeatingGroup).elementType as Struct
+      val elemType = (field.type as RepeatingGroup).elementType
       buildString {
          appendLine("fun ${field.name}(${field.name}: ${field.type.name}) = apply {")
          appendLine("   val grp = encoder.${field.name}Count(${field.name}.size)")
          appendLine("   for (item in ${field.name}) {")
          appendLine("      grp.next()")
-         for (f in struct.fields.sortedBy { it.sbeOrder }) {
-            appendLine("      grp.${f.name}(${f.type.convertToSbe("item.${f.name}")})")
+         when (elemType) {
+            is Struct -> {
+               for (f in elemType.fields.sortedBy { it.sbeOrder }) {
+                  appendLine("      grp.${f.name}(${f.type.convertToSbe("item.${f.name}")})")
+               }
+            }
+            else -> appendLine("      grp.value(${elemType.convertToSbe("item")})")
          }
          appendLine("   }")
          append("}")

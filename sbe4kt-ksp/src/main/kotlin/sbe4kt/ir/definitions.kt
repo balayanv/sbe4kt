@@ -1,5 +1,6 @@
 package sbe4kt.ir
 
+import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
@@ -210,14 +211,14 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
    // Array<T> → ArrayField (SBE repeating group)
    if (declaration.qualifiedName() == "kotlin.Array") {
       val typeArg = resolvedType.arguments.first().type!!.resolve().declaration
-      val elementType = recursiveResolveLeaf(typeArg)
+      val elementType = resolveGroupElementType(typeArg, meta)
       return Array(elementType)
    }
 
    // List<T> → ListField (SBE repeating group)
    if (declaration.qualifiedName() == "kotlin.collections.List") {
       val typeArg = resolvedType.arguments.first().type!!.resolve().declaration
-      val elementType = recursiveResolveLeaf(typeArg)
+      val elementType = resolveGroupElementType(typeArg, meta)
       return List(elementType)
    }
 
@@ -282,5 +283,13 @@ private fun recursiveResolveLeaf(declaration: KSDeclaration): IR.Leaf {
       "kotlin.Double" -> Double
       else -> throw IllegalArgumentException("Unsupported type: ${declaration.qualifiedName()}")
    }
+}
+
+private fun resolveGroupElementType(declaration: KSDeclaration, meta: KSAnnotation?): IR.Leaf {
+   if (declaration.qualifiedName() == "kotlin.String" || declaration.qualifiedName() == "kotlin.CharSequence") {
+      val encoding = meta.encoding()
+      return VarStringN(encoding)
+   }
+   return recursiveResolveLeaf(declaration)
 }
 
