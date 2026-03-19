@@ -9,7 +9,7 @@ data class Trade(
    var id: Long,
 //   var payloads: Array<Int>,
 //   @META(encoding = UTF8)
-   var list : List<Float>,
+   var list : Array<Float>,
 //   var payload: Payload,
 )
 
@@ -19,6 +19,10 @@ data class Payload(
    var f1 : Int,
    var f2 : Int,
 )
+
+enum class En{
+   Val1, Val2
+}
 
 fun main() {
    val source = randomTrade()

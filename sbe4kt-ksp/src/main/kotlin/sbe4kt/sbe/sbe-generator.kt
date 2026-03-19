@@ -34,7 +34,7 @@ internal fun KSP.generateSbe() {
    } }.toSet()
    val varStringComposites = usedVarEncodings.joinToString("\n") { encoding ->
       val charEnc = if (encoding == META.Encoding.UTF8) "UTF-8" else "US-ASCII"
-      val name = if (encoding == META.Encoding.UTF8) "varStringEncoding" else "varAsciiEncoding"
+      val name = if (encoding == META.Encoding.UTF8) "varStrU" else "varStr"
       "<composite name='$name'>\n" +
       "   <type name='length' primitiveType='uint32' maxValue='1073741824'/>\n" +
       "   <type name='varData' primitiveType='uint8' length='0' characterEncoding='$charEnc'/>\n" +

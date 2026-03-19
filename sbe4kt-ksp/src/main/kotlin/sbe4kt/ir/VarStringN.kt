@@ -3,7 +3,7 @@ package sbe4kt.ir
 import sbe4kt.META.Encoding
 
 internal data class VarStringN(val encoding: Encoding) : IR.Leaf {
-   override val sbeName = if (encoding == Encoding.UTF8) "varStringEncoding" else "varAsciiEncoding"
+   override val sbeName = if (encoding == Encoding.UTF8) "varStrU" else "varStr"
    override val name = "String"
    override val defaultValue = "\"\""
    override val randomValue = "Random.nextStr(8)"

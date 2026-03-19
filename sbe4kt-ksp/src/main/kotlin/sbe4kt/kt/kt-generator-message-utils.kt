@@ -10,6 +10,7 @@ import sbe4kt.util.indent
 internal fun generateUtilsSection(message: Message): String {
    val className = message.name
    val hasComposites = message.fields.any { it.type is Composite }
+   val hasGroups = message.fields.any { it.type is RepeatingGroup }
    val hasVarFields = message.hasVariableFields
    val fixedRows = generateFixedLayoutRows(message)
    val varRows = generateVarLayoutRows(message)
@@ -38,24 +39,24 @@ internal fun generateUtilsSection(message: Message): String {
    }
 
    // --- printSbeLayout ---
-   val printMethod = if (hasComposites) {
-      val compositeFields = message.fields.filter { it.type is Composite }.sortedBy { it.sbeOrder }
-      val branches = compositeFields.joinToString("\n") {
-         "\"${it.name}\" -> {\n   result.addAll(${it.name}.sbeLayout(startOffset = row.offset))\n   result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n}"
-      }
+   val needsFlatMode = hasComposites || hasGroups
+   val printMethod = if (needsFlatMode) {
+      val flatBranches = generateFlatBranches(message)
       "fun $className.printSbeLayout(flat: Boolean = false) {\n" +
       "   if (flat) {\n" +
       "      val result = mutableListOf<SbeLayoutRow>()\n" +
       "      for (row in sbeLayout()) {\n" +
-      "         if (row.metadata == \"root\") {\n" +
-      "            result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
-      "            result.add(row)\n" +
-      "            result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
-      "            when (row.field) {\n" +
-      branches.indent(15) + "\n" +
+      "         when {\n" +
+      "            row.metadata == \"root\" || row.sbeType == \"group\" -> {\n" +
+      "               result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
+      "               result.add(row)\n" +
+      "               result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
+      "               when (row.field) {\n" +
+      flatBranches.indent(18) + "\n" +
+      "               }\n" +
+      "               result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
       "            }\n" +
-      "         } else {\n" +
-      "            result.add(row)\n" +
+      "            else -> result.add(row)\n" +
       "         }\n" +
       "      }\n" +
       "      result.toCSV().print()\n" +
@@ -70,6 +71,57 @@ internal fun generateUtilsSection(message: Message): String {
    }
 
    return "$sbeLayoutMethod\n\n$printMethod\n"
+}
+
+private fun generateFlatBranches(message: Message): String {
+   val branches = mutableListOf<String>()
+
+   // Composite branches
+   val compositeFields = message.fields.filter { it.type is Composite }.sortedBy { it.sbeOrder }
+   for (field in compositeFields) {
+      branches.add(
+         "\"${field.name}\" -> {\n" +
+         "   result.addAll(${field.name}.sbeLayout(startOffset = row.offset))\n" +
+         "}"
+      )
+   }
+
+   // Group branches
+   val groupFields = message.fields.filter { it.type is RepeatingGroup }.sortedBy { it.sbeOrder }
+   for (field in groupFields) {
+      val elemType = (field.type as RepeatingGroup).elementType
+      val elemTypeName = elemType.name
+      val elemSbeType = elemType.sbeName
+      val name = field.name
+
+      val body = when (elemType) {
+         is Struct -> buildString {
+            appendLine("var elemOffset = row.offset + 4")
+            appendLine("for ((i, item) in $name.withIndex()) {")
+            appendLine("   result.add(SbeLayoutRow(elemOffset, \"$name[\$i]\", \"$elemTypeName\", \"$elemSbeType\", ${elemType.encodedLength}, item.toString()))")
+            appendLine("   elemOffset += ${elemType.encodedLength}")
+            append("}")
+         }
+         is VarStringN -> buildString {
+            appendLine("var elemOffset = row.offset + 4")
+            appendLine("for ((i, item) in $name.withIndex()) {")
+            appendLine("   result.add(SbeLayoutRow(elemOffset, \"$name[\$i]\", \"String\", \"$elemSbeType\", 4 + item.length, item))")
+            appendLine("   elemOffset += 4 + item.length")
+            append("}")
+         }
+         else -> buildString {
+            appendLine("var elemOffset = row.offset + 4")
+            appendLine("for ((i, item) in $name.withIndex()) {")
+            appendLine("   result.add(SbeLayoutRow(elemOffset, \"$name[\$i]\", \"$elemTypeName\", \"$elemSbeType\", ${elemType.size}, item.toString()))")
+            appendLine("   elemOffset += ${elemType.size}")
+            append("}")
+         }
+      }
+
+      branches.add("\"$name\" -> {\n${body.indent(3)}\n}")
+   }
+
+   return branches.joinToString("\n")
 }
 
 private fun generateFixedLayoutRows(message: Message): String {
