@@ -1,6 +1,7 @@
 package sbe4kt.kt
 
 import sbe4kt.ir.Composite
+import sbe4kt.ir.Nullable
 import sbe4kt.ir.RepeatingGroup
 import sbe4kt.ir.Message
 import sbe4kt.ir.Struct
@@ -19,13 +20,15 @@ internal fun generateUtilsSection(message: Message): String {
    val fixedBlockEnd = message.blockLength + 8
 
    // --- sbeLayout ---
+   val varFieldCount = message.fields.count { it.type.size < 0 }
    val sbeLayoutMethod = if (hasVarFields) {
+      val varOffsetKind = if (varFieldCount > 1) "var" else "val"
       "internal fun $className.sbeLayout(startOffset: Int = 0) : List<SbeLayoutRow> {\n" +
       "   val result = mutableListOf(\n" +
       "      SbeLayoutRow(startOffset + 0, \"[HEADER]\", \"Header\", \"\", 8, \"$headerValue\"),\n" +
       fixedRows.indent(6) + "\n" +
       "   )\n" +
-      "   var varOffset = startOffset + $fixedBlockEnd\n" +
+      "   $varOffsetKind varOffset = startOffset + $fixedBlockEnd\n" +
       varRows.indent(3) + "\n" +
       "   return result\n" +
       "}"
@@ -39,23 +42,35 @@ internal fun generateUtilsSection(message: Message): String {
    }
 
    // --- printSbeLayout ---
-   val needsFlatMode = hasComposites || hasGroups
-   val printMethod = if (needsFlatMode) {
-      val flatBranches = generateFlatBranches(message)
-      "fun $className.printSbeLayout(flat: Boolean = false) {\n" +
-      "   if (flat) {\n" +
+   val hasFlags = message.compressedFlags != null
+   val hasFlatContent = hasComposites || hasGroups || hasFlags
+   val flatBranches = if (hasFlatContent) generateFlatBranches(message) else ""
+   val headerBranch = generateHeaderFlatBranch(message)
+
+   val printMethod =
+      "fun $className.printSbeLayout(flat: Boolean = false, verbose: Boolean = false) {\n" +
+      "   if (flat || verbose) {\n" +
       "      val result = mutableListOf<SbeLayoutRow>()\n" +
       "      for (row in sbeLayout()) {\n" +
       "         when {\n" +
-      "            row.metadata == \"root\" || row.sbeType == \"group\" -> {\n" +
+      "            row.field == \"[HEADER]\" && verbose -> {\n" +
+      "               result.add(row)\n" +
       "               result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
+      "               when (row.field) {\n" +
+      headerBranch.indent(18) + "\n" +
+      "               }\n" +
+      "               result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
+      "            }\n" +
+      (if (hasFlatContent) {
+      "            row.metadata == \"root\" || row.sbeType == \"group\" -> {\n" +
+      "               if (result.isNotEmpty()) result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
       "               result.add(row)\n" +
       "               result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
       "               when (row.field) {\n" +
       flatBranches.indent(18) + "\n" +
       "               }\n" +
-      "               result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
-      "            }\n" +
+      "            }\n"
+      } else "") +
       "            else -> result.add(row)\n" +
       "         }\n" +
       "      }\n" +
@@ -64,13 +79,18 @@ internal fun generateUtilsSection(message: Message): String {
       "      sbeLayout().toCSV().print()\n" +
       "   }\n" +
       "}"
-   } else {
-      "fun $className.printSbeLayout(flat: Boolean = false) {\n" +
-      "   sbeLayout().toCSV().print()\n" +
-      "}"
-   }
 
    return "$sbeLayoutMethod\n\n$printMethod\n"
+}
+
+private fun generateHeaderFlatBranch(message: Message): String {
+   val className = message.name
+   return "\"[HEADER]\" -> {\n" +
+      "   result.add(SbeLayoutRow(row.offset + 0, \"blockLength\", \"UShort\", \"uint16\", 2, ${className}Encoder.BLOCK_LENGTH.toString()))\n" +
+      "   result.add(SbeLayoutRow(row.offset + 2, \"templateId\", \"UShort\", \"uint16\", 2, ${className}Encoder.TEMPLATE_ID.toString()))\n" +
+      "   result.add(SbeLayoutRow(row.offset + 4, \"schemaId\", \"UShort\", \"uint16\", 2, ${className}Encoder.SCHEMA_ID.toString()))\n" +
+      "   result.add(SbeLayoutRow(row.offset + 6, \"version\", \"UShort\", \"uint16\", 2, ${className}Encoder.SCHEMA_VERSION.toString()))\n" +
+      "}"
 }
 
 private fun generateFlatBranches(message: Message): String {
@@ -121,12 +141,22 @@ private fun generateFlatBranches(message: Message): String {
       branches.add("\"$name\" -> {\n${body.indent(3)}\n}")
    }
 
+   // Flags branch — expand each boolean as a bit
+   if (message.compressedFlags != null) {
+      val body = buildString {
+         for ((index, field) in message.flagFields.withIndex()) {
+            appendLine("result.add(SbeLayoutRow(row.offset, \"${field.name}\", \"Boolean\", \"bit $index\", -8, ${field.name}.toString()))")
+         }
+      }.trimEnd()
+      branches.add("\"flags\" -> {\n${body.indent(3)}\n}")
+   }
+
    return branches.joinToString("\n")
 }
 
 private fun generateFixedLayoutRows(message: Message): String {
    val result = mutableListOf<String>()
-   val sortedFields = message.fields.filter { it.type.size >= 0 }.sortedBy { it.sbeOrder }
+   val sortedFields = message.nonFlagFields.filter { it.type.size > 0 }.sortedBy { it.sbeOrder }
    val headerSize = 8
 
    for ((index, fieldIr) in sortedFields.withIndex()) {
@@ -149,6 +179,21 @@ private fun generateFixedLayoutRows(message: Message): String {
       result.add("""SbeLayoutRow(startOffset + $offset, "$field", "$type", "$sbeType", $size, $value$metadata),""")
    }
 
+   // Add null-tracking boolean rows for nullable fields
+   for (fieldIr in message.nonFlagFields.filter { it.isNullable }.sortedBy { it.nullBoolSbeOrder }) {
+      val offset = fieldIr.nullBoolOffset + headerSize
+      result.add("""SbeLayoutRow(startOffset + $offset, "${fieldIr.nullBoolName}", "Boolean", "int8", 1, (${fieldIr.name} != null).toString()),""")
+   }
+
+   // Add flags set row if compactFlags is enabled — show raw uint value
+   message.compressedFlags?.let { cf ->
+      val offset = cf.offset + headerSize
+      val rawExpr = message.flagFields.mapIndexed { index, field ->
+         "(if (${field.name}) ${1 shl index} else 0)"
+      }.joinToString(" or ").ifEmpty { "0" }
+      result.add("""SbeLayoutRow(startOffset + $offset, "flags", "${cf.setName}", "${cf.encodingType}", ${cf.size}, ($rawExpr).toString(), metadata = "root"),""")
+   }
+
    if (message.usePadding && sortedFields.isNotEmpty()) {
       val lastField = sortedFields.last()
       val finalPadding = message.blockLength - (lastField.offset + lastField.type.size)
@@ -167,29 +212,34 @@ private fun generateVarLayoutRows(message: Message): String {
 
    return varFields.mapIndexed { index, fieldIr ->
       val isLast = index == varFields.lastIndex
-      when (fieldIr.type) {
+      val type = fieldIr.type
+      when (type) {
          is RepeatingGroup -> {
-            val elemType = fieldIr.type.elementType
+            val elemType = type.elementType
             val field = fieldIr.name
-            val typeName = fieldIr.type.name
+            val typeName = type.name
+            val countVar = "${field}Count"
+            val sizeVar = "${field}Size"
             val sizeExpr = when (elemType) {
-               is Struct -> "4 + count * ${elemType.encodedLength}"
+               is Struct -> "4 + $countVar * ${elemType.encodedLength}"
                is VarStringN -> "4 + $field.sumOf { 4 + it.length }"
-               else -> "4 + count * ${elemType.size}"
+               else -> "4 + $countVar * ${elemType.size}"
             }
-            "run {\n" +
-            "   val count = $field.size\n" +
-            "   val groupSize = $sizeExpr\n" +
-            "   result.add(SbeLayoutRow(varOffset, \"$field\", \"$typeName\", \"group\", groupSize, \"count=\$count\"))\n" +
-            if (!isLast) "   varOffset += groupSize\n}" else "}"
+            "val $countVar = $field.size\n" +
+            "val $sizeVar = $sizeExpr\n" +
+            "result.add(SbeLayoutRow(varOffset, \"$field\", \"$typeName\", \"group\", $sizeVar, $field.toString()))\n" +
+            if (!isLast) "varOffset += $sizeVar" else ""
          }
          else -> {
             val field = fieldIr.name
-            val type = fieldIr.type.name
-            val sbeType = fieldIr.type.sbeName
-            val value = if (fieldIr.type.name == "String") field else "$field.toString()"
-            "result.add(SbeLayoutRow(varOffset, \"$field\", \"$type\", \"$sbeType\", $field.length, $value))" +
-            if (!isLast) "\nvarOffset += $field.length" else ""
+            val rawType = if (type is Nullable) type.innerType else type
+            val typeName = type.name
+            val sbeType = rawType.sbeName
+            val nullSafe = if (fieldIr.isNullable) "?" else ""
+            val value = "$field$nullSafe.toString() ?: \"null\""
+            val lengthExpr = "$field$nullSafe.length ?: 0"
+            "result.add(SbeLayoutRow(varOffset, \"$field\", \"$typeName\", \"$sbeType\", $lengthExpr, $value))" +
+            if (!isLast) "\nvarOffset += $lengthExpr" else ""
          }
       }
    }.joinToString("\n")

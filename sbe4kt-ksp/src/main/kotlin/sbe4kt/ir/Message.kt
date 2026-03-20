@@ -24,11 +24,17 @@ internal data class Message(
    var id: Int = annotation.id()
    val usePadding: Boolean = annotation.usePadding()
    val allowNullableTypes: Boolean = annotation.allowNullableTypes()
-   val compactFlags: Boolean = annotation.compactFlags()
+   val compactFlags: Int = annotation.compactFlags()
    var blockLength: Int = -1
    val fields = declaration.getFieldIRs()
    val deprecatedFields: MutableList<PrevField> = mutableListOf()
-   val hasVariableFields: Boolean get() = fields.any { it.type.size < 0 }
+   val hasVariableFields: Boolean get() = nonFlagFields.any { it.type.size < 0 }
+
+   // compactFlags support: Bool fields get swapped to Bool(compressedFlags, bitPos) in initFresh
+   val hasCompactFlags: Boolean get() = compactFlags > 0
+   var compressedFlags: CompressedFlags? = null
+   val flagFields: kotlin.collections.List<Field> get() = fields.filter { it.type is Bool && (it.type as Bool).isCompressed }
+   val nonFlagFields: kotlin.collections.List<Field> get() = fields.filter { it.type !is Bool || !(it.type as Bool).isCompressed }
 
    override val name = declaration.simpleName()
 
@@ -47,6 +53,16 @@ internal data class Message(
    init {
       fields.onEach { require(!it.isNullable || allowNullableTypes) { "nullable field '${it.name}' in message '${declaration.simpleName()}' is not allowed" } }
 
+      if (hasCompactFlags) {
+         require(compactFlags in setOf(8, 16, 32, 64)) {
+            "compactFlags must be 8, 16, 32, or 64, got $compactFlags in '$name'"
+         }
+         val boolCount = fields.count { it.type is Bool }
+         require(boolCount <= compactFlags) {
+            "'$name' has $boolCount Boolean fields but compactFlags=$compactFlags only supports $compactFlags bits"
+         }
+      }
+
       if (previousMessage != null) {
          initWithPreviousSchema(previousMessage)
       } else {
@@ -58,9 +74,21 @@ internal data class Message(
       var currentOffset = 0
       var sbeOrder = 1
 
+      // When compactFlags is set, swap Bool → Bool(compressedFlags, bitPos)
+      if (hasCompactFlags) {
+         val cf = CompressedFlags("${name}Flags", "uint$compactFlags", compactFlags / 8)
+         compressedFlags = cf
+         var bitPos = 0
+         fields.filter { it.type is Bool }.forEach { field ->
+            field.type = Bool(cf, bitPos++)
+            field.offset = -2 // marker: not a normal field, packed in flags set
+         }
+      }
+
       // Fixed fields first — sorted largest-to-smallest for optimal alignment
-      fields
-         .filter { it.type.size >= 0 }
+      // (CompressedBool has size=0, excluded by size > 0 filter)
+      nonFlagFields
+         .filter { it.type.size > 0 }
          .sortedByDescending { it.type.size }
          .forEach { field ->
             if (usePadding) {
@@ -72,6 +100,36 @@ internal data class Message(
             currentOffset += field.type.size
          }
 
+      // Synthetic field IDs start after max regular field ID to avoid collisions
+      var syntheticId = fields.maxOf { it.id }
+
+      // Allocate null-tracking booleans (is${Field}Set) for nullable fields
+      val nullableFields = nonFlagFields.filter { it.isNullable }
+      for (field in nullableFields) {
+         if (usePadding) {
+            val padding = (8 - (currentOffset % 8)) % 8
+            currentOffset += padding
+         }
+         field.nullBoolOffset = currentOffset
+         field.nullBoolSbeOrder = sbeOrder++
+         field.nullBoolId = ++syntheticId
+         currentOffset += 1 // Bool = 1 byte
+      }
+
+      // Insert the compressed flags set as a single fixed field
+      compressedFlags?.let { cf ->
+         if (usePadding) {
+            val padding = (8 - (currentOffset % 8)) % 8
+            currentOffset += padding
+         }
+         cf.offset = currentOffset
+         cf.sbeOrder = sbeOrder++
+         cf.fieldId = ++syntheticId
+         currentOffset += cf.size
+         // Give compressed Bool fields sbeOrders after the flags field
+         flagFields.forEach { it.sbeOrder = sbeOrder++ }
+      }
+
       blockLength = if (usePadding) {
          val remainder = currentOffset % 8
          if (remainder == 0) currentOffset else currentOffset + (8 - remainder)
@@ -80,7 +138,7 @@ internal data class Message(
       }
 
       // Variable fields after — groups first (SBE requirement), then data
-      val varFields = fields.filter { it.type.size < 0 }
+      val varFields = nonFlagFields.filter { it.type.size < 0 }
       val groupFields = varFields.filter { it.type is RepeatingGroup }
       val dataFields = varFields.filter { it.type !is RepeatingGroup }
       (groupFields + dataFields).forEach { field ->
@@ -198,14 +256,21 @@ internal data class Message(
       val packageName = packageStr
       imports.add("org.agrona.DirectBuffer")
       imports.add("org.agrona.MutableDirectBuffer")
-      imports.add("org.agrona.concurrent.UnsafeBuffer")
       if (hasVariableFields) imports.add("org.agrona.ExpandableArrayBuffer")
+      else imports.add("org.agrona.concurrent.UnsafeBuffer")
       imports.add("sbe4kt.MessageHeaderEncoder")
       imports.add("sbe4kt.MessageHeaderDecoder")
       imports.add("sbe4kt.lib.SbeLayoutRow")
       imports.add("sbe4kt.lib.toCSV")
       imports.add("sbe4kt.${name}Encoder")
       imports.add("sbe4kt.${name}Decoder")
+      compressedFlags?.let {
+         imports.add("sbe4kt.${it.setName}Encoder")
+         imports.add("sbe4kt.${it.setName}Decoder")
+      }
+      if (fields.any { it.isNullable }) {
+         imports.addAll(Bool().imports)
+      }
       imports.add(declaration.importName())
       fields.onEach { imports.addAll(it.type.imports) }
 

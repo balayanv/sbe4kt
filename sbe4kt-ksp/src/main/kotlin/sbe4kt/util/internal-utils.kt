@@ -82,7 +82,7 @@ internal fun KSClassDeclaration.importName(): String {
    val parts = mutableListOf(simpleName.asString())
    var current: KSDeclaration? = parentDeclaration
    while (current is KSClassDeclaration) {
-      parts.addFirst(current.simpleName.asString())
+      parts.add(0, current.simpleName.asString())
       current = current.parentDeclaration
    }
    val pkg = packageName.asString()
@@ -99,7 +99,7 @@ internal fun KSAnnotation?.id() = supplyOrDefaultTo(-1) { this!!.arguments.find 
 internal fun KSAnnotation?.usePadding() = supplyOrDefaultTo(false) { this!!.arguments.find { it.name!!.asString() == "usePadding" }!!.value as Boolean }
 internal fun KSAnnotation?.isStruct() = supplyOrDefaultTo(false) { this!!.arguments.find { it.name!!.asString() == "isStruct" }!!.value as Boolean }
 internal fun KSAnnotation?.allowNullableTypes() = supplyOrDefaultTo(false) { this!!.arguments.find { it.name!!.asString() == "allowNullableTypes" }!!.value as Boolean }
-internal fun KSAnnotation?.compactFlags() = supplyOrDefaultTo(false) { this!!.arguments.find { it.name!!.asString() == "compactFlags" }!!.value as Boolean }
+internal fun KSAnnotation?.compactFlags() = supplyOrDefaultTo(-1) { this!!.arguments.find { it.name!!.asString() == "compactFlags" }!!.value as Int }
 internal fun KSPropertyDeclaration.metaAnnotation() = this.annotations.find { it.shortName.asString() == "META" }
 internal fun KSAnnotation?.allowVarLengthFields() = supplyOrDefaultTo(false) { this!!.arguments.find { it.name!!.asString() == "allowVarLengthFields" }!!.value as Boolean }
 internal fun KSAnnotation?.size() = supplyOrDefaultTo(-1) { this!!.arguments.find { it.name!!.asString() == "size" }!!.value as Int }

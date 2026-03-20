@@ -3,6 +3,7 @@ package sbe4kt.kt
 import com.google.devtools.ksp.processing.Dependencies
 import sbe4kt.KSP
 import sbe4kt.ir.Message
+import sbe4kt.ir.StringN
 import sbe4kt.util.sbeSizeConstant
 import sbe4kt.util.trimTemplate
 
@@ -10,6 +11,13 @@ internal fun generateTestsSection(message: Message): String {
    val className = message.name
    val sizeConstName = className.sbeSizeConstant()
    val bufferExpr = if (message.hasVariableFields) "ExpandableArrayBuffer()" else "UnsafeBuffer(ByteArray($sizeConstName))"
+   // StringBuilder doesn't implement value equality — compare toString() instead
+   val hasStringBuilder = message.fields.any { it.type is StringN }
+   val equalityCheck = if (hasStringBuilder) {
+      "assertEquals(original.toString(), decoded.toString())"
+   } else {
+      "assertEquals(original, decoded)"
+   }
 
    return """
       |internal class ${className}Test {
@@ -26,7 +34,7 @@ internal fun generateTestsSection(message: Message): String {
       |
       |         assertTrue(bytesWritten > 0)
       |         assertEquals(bytesWritten, bytesRead)
-      |         assertEquals(original, decoded)
+      |         $equalityCheck
       |      }
       |   }
       |}

@@ -1529,21 +1529,17 @@ fun main() {
 19. [ ] add support for nullability (adds a bool isSet$field)
 20. [ ] add support for `useFlags` nullability + normal boolean fields stored via bitset `sbe:set`
 21. [ ] support for fixed size `Array` via `@META(size=N)`
-22. [ ] support for fixed size `Map` via `@META(size=N)`
-23. [ ] support for fixed size `Set` via `@META(size=N)`
-24. [ ] add support for some date time api objects
-25. [ ] add support for var length type `String/CharSequence` (disables flyweights)
-26. [ ] add support for var length type `List<T>` (disables flyweights)
-27. [ ] add support for var length type `Map<T>` (disables flyweights)
-28. [ ] add support for var length type `Set<T>` (disables flyweights)
-29. [ ] add support for `javaFriendly` code generation
-30. [x] add support for `version`, `since` via `last-sbe-schema.xml` baseline tracking
-31. [ ] add support for `generateTests` flag to control per message Test generation
-32. [ ] add configuration option `requireMessageIds` (fails compilation if a message has no id)
-33. [ ] add configuration option `requireNotNulls` (cannot use `allowNullableTypes`)
-34. [ ] add configuration option `requireFixedLength` (cannot use `allowVarLengthFields`)
-35. [x] publish `sbe4kt` as artefact to mvn local and make it usable from other projects as a plugin
-36. [ ] add flags to control strictness of schema evolution
+22. [ ] add support for some date time api objects
+23. [ ] add support for var length type `String/CharSequence` (disables flyweights)
+24. [ ] add support for var length type `List<T>` (disables flyweights)
+25. [ ] add support for `javaFriendly` code generation
+26. [x] add support for `version`, `since` via `last-sbe-schema.xml` baseline tracking
+27. [ ] add support for `generateTests` flag to control per message Test generation
+28. [ ] add configuration option `requireMessageIds` (fails compilation if a message has no id)
+29. [ ] add configuration option `requireNotNulls` (cannot use `allowNullableTypes`)
+30. [ ] add configuration option `requireFixedLength` (cannot use `allowVarLengthFields`)
+31. [x] publish `sbe4kt` as artefact to mvn local and make it usable from other projects as a plugin
+32. [ ] add flags to control strictness of schema evolution
 
 ## Issues/Questions/Notes
 

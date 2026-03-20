@@ -148,14 +148,23 @@ internal data class Field(
    val declarationOrder: Int = 0,
 ) {
    val name: String = prop.simpleName.asString().requireNotReserveWord()
-   val type: IR.Leaf = prop.toLeaf()
    val isNullable: Boolean = prop.type.resolve().isMarkedNullable
-   val tags: kotlin.collections.List<String> = prop.metaAnnotation().tags()
+   var type: IR.Leaf = run {
+      val raw = prop.toLeaf()
+      if (isNullable) Nullable(raw) else raw
+   }
+   val tags: List<String> = prop.metaAnnotation().tags()
    val removeAfter: Int = prop.metaAnnotation().removeAfter()
 
    var id: Int = -1
    var offset: Int = -1
    var sbeOrder: Int = -1
+
+   // null-tracking: synthetic is${Name}Set boolean field in SBE (populated by Message.initFresh)
+   val nullBoolName: String get() = "is${name.replaceFirstChar { it.uppercase() }}Set"
+   var nullBoolOffset: Int = -1
+   var nullBoolSbeOrder: Int = -1
+   var nullBoolId: Int = -1
 }
 
 // recursive IR resolution
@@ -319,7 +328,7 @@ private fun recursiveResolveLeaf(declaration: KSDeclaration): IR.Leaf {
    }
 
    return when (declaration.qualifiedName()) {
-      "kotlin.Boolean" -> Bool
+      "kotlin.Boolean" -> Bool()
       "kotlin.Char" -> Char
       "kotlin.Byte" -> Int8
       "kotlin.Short" -> Int16

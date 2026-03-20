@@ -17,9 +17,9 @@ internal data class StringN(val length: Int, val encoding: Encoding = Encoding.A
       "sbe4kt.lib.nextStr"
    )
 
-   override fun encodeField(encoder: String, field: String, value: String) = "$encoder.put$field($value)"
+   override fun encodeField(encoder: String, field: String, value: String) = "$encoder.$field($value)"
 
-   override fun decodeField(decoder: String, field: String) = "$decoder.get$field()"
+   override fun decodeField(decoder: String, field: String) = "$decoder.$field()"
 
    override fun fwSetter(encoder: String, field: String) = "$encoder.${field}($field)"
 

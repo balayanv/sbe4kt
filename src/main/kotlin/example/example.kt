@@ -1,38 +1,40 @@
 package example
 
-import org.agrona.collections.IntArrayList
+import org.agrona.ExpandableArrayBuffer
 import sbe4kt.SBE
 
 
-@SBE
+@SBE(allowNullableTypes = true, compactFlags = 8)
 data class Trade(
-   var id: Long,
-   var list : IntArrayList,
+   var f1: Int,
+   var f2: Long,
+   var f3: Double,
+   var isThisEnabled: Boolean,
+   var isThatEnabled: Boolean,
+   var isSkyBlue: Boolean,
+   var payload: Payload,
+   var str1 : StringBuilder?,
+//   var str2 : StringBuilder,
+//   var str3 : StringBuilder,
 )
 
 @SBE(isStruct = true)
-//@SBE
 data class Payload(
-   var f1 : Int,
-   var f2 : Int,
+   var f1: Int,
+   var f2: Int,
 )
-
-enum class En{
-   Val1, Val2
-}
 
 fun main() {
    val source = randomTrade()
 
-   println(source)
-   val buffer = org.agrona.ExpandableArrayBuffer()
-   val bytesWritten = source.encodeTo(buffer)
-   println("bytesWritten : $bytesWritten")
+   val buffer = ExpandableArrayBuffer()
+   val writer = TradeW(buffer)
+   writer.encodeFrom(source)
 
    val target = newTrade()
-   val bytesRead = target.decodeFrom(buffer)
-   println("bytesRead : $bytesRead")
+   val reader = TradeR(buffer)
+   reader.decodeInto(target)
 
-   println(target)
-   target.printSbeLayout(flat = true)
+   target.printSbeLayout()
+//   target.printSbeLayout(flat = true, verbose = true)
 }

@@ -143,13 +143,13 @@ fun List<SbeLayoutRow>.toCSV(): CSV {
             row.field,
             row.type,
             row.sbeType,
-            if (row.size > 0) row.size.toString() else "",
+            if (row.size > 0) row.size.toString() else if (row.size < 0) "1/${-row.size}" else "",
             row.value,
             metadata = row.metadata
          )
       }
    }
-   val endOffset = if (isEmpty()) 0 else filter { it.metadata != "separator" }.maxOfOrNull { it.offset + it.size } ?: 0
+   val endOffset = if (isEmpty()) 0 else filter { it.metadata != "separator" }.maxOfOrNull { it.offset + maxOf(it.size, 0) } ?: 0
    csv.addRow(endOffset.toString(), "[END]", "", "", "", "")
    return csv
 }

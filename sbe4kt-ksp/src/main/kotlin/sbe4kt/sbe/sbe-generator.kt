@@ -6,6 +6,7 @@ import sbe4kt.ir.Enum
 import sbe4kt.ir.IR
 import sbe4kt.ir.RepeatingGroup
 import sbe4kt.ir.Message
+import sbe4kt.ir.Nullable
 import sbe4kt.ir.StringN
 import sbe4kt.ir.Struct
 import sbe4kt.ir.Union
@@ -26,7 +27,8 @@ internal fun KSP.generateSbe() {
 
    // Variable-length string encoding composites (from direct fields and group element types)
    val usedVarEncodings = ir.messages.flatMap { it.fields.flatMap { f ->
-      when (val type = f.type) {
+      val type = if (f.type is Nullable) (f.type as Nullable).innerType else f.type
+      when (type) {
          is VarStringN -> listOf(type.encoding)
          is RepeatingGroup -> if (type.elementType is VarStringN) listOf((type.elementType as VarStringN).encoding) else emptyList()
          else -> emptyList()
@@ -48,6 +50,15 @@ internal fun KSP.generateSbe() {
       "   <type name='numInGroup' primitiveType='uint16'/>\n" +
       "</composite>"
    } else ""
+
+   // Flags sets — for messages with compactFlags
+   val flagsSets = ir.messages.mapNotNull { msg ->
+      val cf = msg.compressedFlags ?: return@mapNotNull null
+      val choices = msg.flagFields.sortedBy { it.declarationOrder }.mapIndexed { index, field ->
+         "   <choice name='${field.name}'>$index</choice>"
+      }.joinToString("\n")
+      "<set name='${cf.setName}' encodingType='${cf.encodingType}'>\n$choices\n</set>"
+   }.joinToString("\n")
 
    val structs = ir.structs.joinToString("\n") { generateCompositeType(it) }
    val activeMessages = ir.messages.joinToString("\n") { generateMessageBody(it, version) }
@@ -78,6 +89,8 @@ internal fun KSP.generateSbe() {
       |${varStringComposites.indent(6)}
       |
       |${groupSizeComposite.indent(6)}
+      |
+      |${flagsSets.indent(6)}
       |
       |${structs.indent(6)}
       |   </types>
@@ -130,8 +143,8 @@ private fun generateMessageBody(message: Message, schemaVersion: Int): String {
       val usePadding: Boolean,
    )
 
-   // current fields (excluding group fields, handled separately)
-   val currentEntries = message.fields.filter { it.type !is RepeatingGroup }.map { field ->
+   // current fields (excluding group fields and flag fields, handled separately)
+   val currentEntries = message.nonFlagFields.filter { it.type !is RepeatingGroup }.map { field ->
       val sinceVersion = when {
          field.name in evolution -> schemaVersion
          message.previousMessage != null -> {
@@ -189,7 +202,40 @@ private fun generateMessageBody(message: Message, schemaVersion: Int): String {
       )
    }
 
-   val allEntries = (currentEntries + deprecatedEntries).sortedBy { it.sbeOrder }
+   // Add flags set field if compactFlags is enabled
+   val cf = message.compressedFlags
+   val flagsEntry = if (cf != null) {
+      listOf(SbeFieldEntry(
+         name = "flags",
+         id = cf.fieldId,
+         type = cf.setName,
+         offset = cf.offset,
+         sbeOrder = cf.sbeOrder,
+         sinceVersion = null,
+         deprecated = null,
+         description = null,
+         presence = null,
+         usePadding = message.usePadding,
+      ))
+   } else emptyList()
+
+   // Null-tracking boolean fields for nullable fields
+   val nullTrackingEntries = message.nonFlagFields.filter { it.isNullable }.map { field ->
+      SbeFieldEntry(
+         name = field.nullBoolName,
+         id = field.nullBoolId,
+         type = "int8",
+         offset = field.nullBoolOffset,
+         sbeOrder = field.nullBoolSbeOrder,
+         sinceVersion = null,
+         deprecated = null,
+         description = null,
+         presence = null,
+         usePadding = message.usePadding,
+      )
+   }
+
+   val allEntries = (currentEntries + deprecatedEntries + flagsEntry + nullTrackingEntries).sortedBy { it.sbeOrder }
    val fixedEntries = allEntries.filter { it.offset == null || it.offset >= 0 }
    val varDataEntries = allEntries.filter { it.offset != null && it.offset < 0 }
 
