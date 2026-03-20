@@ -8,9 +8,9 @@ import sbe4kt.META.Encoding
  */
 internal data class StringN(val length: Int, val encoding: Encoding = Encoding.ASCII) : IR.Leaf {
    override val sbeName = "CharArray$length${if (encoding == Encoding.UTF8) "U" else ""}"
-   override val name = "String"
-   override val defaultValue = "\"\""
-   override val randomValue = "Random.nextStr($length)"
+   override val name = "StringBuilder"
+   override val defaultValue = "StringBuilder()"
+   override val randomValue = "StringBuilder(Random.nextStr($length))"
    override val size = length
    override val packageStr = ""
    override val imports: Set<String> = setOf(
@@ -24,4 +24,7 @@ internal data class StringN(val length: Int, val encoding: Encoding = Encoding.A
    override fun fwSetter(encoder: String, field: String) = "$encoder.${field}($field)"
 
    override fun fwGetter(decoder: String, field: String) = "$decoder.${field}()"
+
+   override fun assignToInstanceField(instance: String, field: String, value: String) =
+      "$instance.$field.clear().append($value)"
 }

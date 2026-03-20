@@ -1,9 +1,8 @@
 package sbe4kt.kt
 
-import sbe4kt.ir.Array
+import sbe4kt.ir.ArrayListGroup
 import sbe4kt.ir.Composite
 import sbe4kt.ir.Field
-import sbe4kt.ir.List
 import sbe4kt.ir.Message
 import sbe4kt.ir.RepeatingGroup
 import sbe4kt.ir.Struct
@@ -202,20 +201,14 @@ private fun generateGroupFwGetters(groupFields: kotlin.collections.List<Field>):
          else -> elemType.convertFromSbe("grpDec.value()")
       }
       when (field.type) {
-         is Array -> buildString {
+         is ArrayListGroup -> buildString {
             appendLine("fun ${field.name}(): ${field.type.name} {")
             appendLine("   val grpDec = decoder.${field.name}()")
-            appendLine("   return Array(grpDec.count()) {")
-            appendLine("      grpDec.next()")
-            appendLine("      $valueExpr")
+            appendLine("   val result = ${field.type.name}(grpDec.count())")
+            appendLine("   for (grpDec in grpDec) {")
+            appendLine("      result.add($valueExpr)")
             appendLine("   }")
-            append("}")
-         }
-         is List -> buildString {
-            appendLine("fun ${field.name}(): ${field.type.name} = buildList {")
-            appendLine("   for (grpDec in decoder.${field.name}()) {")
-            appendLine("      add($valueExpr)")
-            appendLine("   }")
+            appendLine("   return result")
             append("}")
          }
          else -> throw IllegalArgumentException("Unexpected RepeatingGroup subtype: ${field.type::class}")

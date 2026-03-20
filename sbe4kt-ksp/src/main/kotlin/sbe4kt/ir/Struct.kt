@@ -61,8 +61,6 @@ internal data class Struct(
             addAll(field.type.imports)
          }
          add(importBase)
-         val pkg = importBase.substringBeforeLast('.')
-         add("${pkg}.${name}RW")
       }
    }
 

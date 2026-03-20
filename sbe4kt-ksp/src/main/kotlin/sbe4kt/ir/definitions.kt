@@ -208,18 +208,11 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
       }
    }
 
-   // Array<T> → ArrayField (SBE repeating group)
-   if (declaration.qualifiedName() == "kotlin.Array") {
+   // ArrayList<T> → ArrayListGroup (SBE repeating group)
+   if (declaration.qualifiedName() == "java.util.ArrayList") {
       val typeArg = resolvedType.arguments.first().type!!.resolve().declaration
       val elementType = resolveGroupElementType(typeArg, meta)
-      return Array(elementType)
-   }
-
-   // List<T> → ListField (SBE repeating group)
-   if (declaration.qualifiedName() == "kotlin.collections.List") {
-      val typeArg = resolvedType.arguments.first().type!!.resolve().declaration
-      val elementType = resolveGroupElementType(typeArg, meta)
-      return List(elementType)
+      return ArrayListGroup(elementType)
    }
 
    // Variable-length string: String with encoding annotation but no size
