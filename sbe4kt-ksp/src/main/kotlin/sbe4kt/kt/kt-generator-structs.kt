@@ -127,7 +127,9 @@ private fun generateStructReader(struct: Struct): String {
    val fieldGetters = struct.fields.joinToString("\n\n") {
       "fun ${it.name}() = ${it.type.convertFromSbe("decoder.${it.name}()")}"
    }
-   val decodeBody = struct.fields.joinToString("\n") { "target.${it.name} = ${it.type.convertFromSbe("decoder.${it.name}()")}" }
+   val decodeBody = struct.fields.joinToString("\n") {
+      it.type.assignToInstanceField("target", it.name, it.type.convertFromSbe("decoder.${it.name}()"))
+   }
 
    return """
       |class ${struct.name}R {

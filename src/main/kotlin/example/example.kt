@@ -1,16 +1,13 @@
 package example
 
+import org.agrona.collections.IntArrayList
 import sbe4kt.SBE
-import java.util.UUID
 
 
 @SBE
 data class Trade(
    var id: Long,
-//   var payloads: Array<Int>,
-//   @META(encoding = UTF8)
-   var list : Array<Float>,
-//   var payload: Payload,
+   var list : IntArrayList,
 )
 
 @SBE(isStruct = true)

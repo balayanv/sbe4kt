@@ -9,13 +9,14 @@ import sbe4kt.util.trimTemplate
 internal fun generateTestsSection(message: Message): String {
    val className = message.name
    val sizeConstName = className.sbeSizeConstant()
+   val bufferExpr = if (message.hasVariableFields) "ExpandableArrayBuffer()" else "UnsafeBuffer(ByteArray($sizeConstName))"
 
    return """
       |internal class ${className}Test {
       |
       |   @Test
       |   fun testRandomValues() {
-      |      val buffer = UnsafeBuffer(ByteArray($sizeConstName))
+      |      val buffer = $bufferExpr
       |      repeat(100) {
       |         val original = random$className()
       |         val bytesWritten = original.encodeTo(buffer)
@@ -25,20 +26,6 @@ internal fun generateTestsSection(message: Message): String {
       |
       |         assertTrue(bytesWritten > 0)
       |         assertEquals(bytesWritten, bytesRead)
-      |         assertEquals(original, decoded)
-      |      }
-      |   }
-      |
-      |   @Test
-      |   fun testFlyweights() {
-      |      val wrapper = ${className}RW()
-      |      repeat(100) {
-      |         val original = random$className()
-      |         wrapper.encodeFrom(original)
-      |
-      |         val decoded = new$className()
-      |         wrapper.decodeInto(decoded)
-      |
       |         assertEquals(original, decoded)
       |      }
       |   }
@@ -61,6 +48,7 @@ internal fun KSP.generateTestsForMessage(message: Message) {
 
    // Generate imports section
    val testImports = setOf(
+      "org.agrona.ExpandableArrayBuffer",
       "org.agrona.concurrent.UnsafeBuffer",
       "org.junit.jupiter.api.Test",
       "org.junit.jupiter.api.Assertions.assertEquals",

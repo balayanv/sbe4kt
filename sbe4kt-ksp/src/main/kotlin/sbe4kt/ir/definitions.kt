@@ -196,29 +196,82 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
       )
    }
 
+   // Reusability violations — reject immutable types with clear messages
+   if (declaration.qualifiedName() == "kotlin.String" || declaration.qualifiedName() == "kotlin.CharSequence") {
+      throw IllegalArgumentException(
+         "Field '${simpleName.asString()}': String is not reusable. Use StringBuilder instead. " +
+         "For fixed-size: @META(size=N) var field: StringBuilder. " +
+         "For variable-length: var field: StringBuilder"
+      )
+   }
+
+   if (declaration.qualifiedName() == "kotlin.Array") {
+      throw IllegalArgumentException(
+         "Field '${simpleName.asString()}': Array<T> is not reusable. Use ArrayList<T> for objects, " +
+         "IntArrayList/LongArrayList for primitives."
+      )
+   }
+
+   if (declaration.qualifiedName() == "kotlin.collections.List" ||
+       declaration.qualifiedName() == "kotlin.collections.MutableList") {
+      throw IllegalArgumentException(
+         "Field '${simpleName.asString()}': List<T> is not reusable. Use ArrayList<T> for objects, " +
+         "IntArrayList/LongArrayList for primitives."
+      )
+   }
+
    if (size > 0) {
       if (declaration.qualifiedName() == "kotlin.ByteArray") {
          require(size > 0) { "ByteArray size must be positive, got $size" }
          return ByteArrayN(size)
       }
-      if (declaration.qualifiedName() == "kotlin.String") {
-         require(size > 0) { "String size must be positive, got $size" }
+      if (declaration.qualifiedName() == "kotlin.text.StringBuilder" ||
+          declaration.qualifiedName() == "java.lang.StringBuilder") {
+         require(size > 0) { "StringBuilder size must be positive, got $size" }
          val encoding = meta.encoding()
          return StringN(size, encoding)
       }
    }
 
-   // ArrayList<T> → ArrayListGroup (SBE repeating group)
+   // ArrayList<T> → ArrayListGroup (SBE repeating group, object types only)
    if (declaration.qualifiedName() == "java.util.ArrayList") {
       val typeArg = resolvedType.arguments.first().type!!.resolve().declaration
+      val qualName = typeArg.qualifiedName()
+
+      // Reject boxed primitives — use IntArrayList/LongArrayList instead
+      val boxedPrimitives = setOf("kotlin.Int", "kotlin.Long", "kotlin.Float", "kotlin.Double",
+         "kotlin.Short", "kotlin.Byte", "kotlin.Boolean", "kotlin.Char",
+         "java.lang.Integer", "java.lang.Long", "java.lang.Float", "java.lang.Double",
+         "java.lang.Short", "java.lang.Byte", "java.lang.Boolean", "java.lang.Character")
+      if (qualName in boxedPrimitives) {
+         val hint = when (qualName) {
+            "kotlin.Int", "java.lang.Integer" -> " Use IntArrayList instead."
+            "kotlin.Long", "java.lang.Long" -> " Use LongArrayList instead."
+            else -> " Primitive type '${typeArg.simpleName()}' is not supported in repeating groups."
+         }
+         throw IllegalArgumentException(
+            "Field '${simpleName.asString()}': ArrayList<${typeArg.simpleName()}> causes boxing.$hint"
+         )
+      }
+
       val elementType = resolveGroupElementType(typeArg, meta)
       return ArrayListGroup(elementType)
    }
 
-   // Variable-length string: String with encoding annotation but no size
-   if (declaration.qualifiedName() == "kotlin.String" || declaration.qualifiedName() == "kotlin.CharSequence") {
+   // StringBuilder — reusable string type (variable-length when no size annotation)
+   if (declaration.qualifiedName() == "kotlin.text.StringBuilder" ||
+       declaration.qualifiedName() == "java.lang.StringBuilder") {
       val encoding = meta.encoding()
       return VarStringN(encoding)
+   }
+
+   // Agrona primitive collections — reusable, unboxed
+   if (declaration.qualifiedName() == "org.agrona.collections.IntArrayList") {
+      return IntArrayListGroup
+   }
+
+   if (declaration.qualifiedName() == "org.agrona.collections.LongArrayList") {
+      return LongArrayListGroup
    }
 
    val tags = meta.tags()
@@ -279,7 +332,8 @@ private fun recursiveResolveLeaf(declaration: KSDeclaration): IR.Leaf {
 }
 
 private fun resolveGroupElementType(declaration: KSDeclaration, meta: KSAnnotation?): IR.Leaf {
-   if (declaration.qualifiedName() == "kotlin.String" || declaration.qualifiedName() == "kotlin.CharSequence") {
+   if (declaration.qualifiedName() == "kotlin.text.StringBuilder" ||
+       declaration.qualifiedName() == "java.lang.StringBuilder") {
       val encoding = meta.encoding()
       return VarStringN(encoding)
    }
