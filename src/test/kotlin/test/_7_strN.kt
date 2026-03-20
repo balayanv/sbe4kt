@@ -10,7 +10,7 @@ import sbe4kt.META
 data class Trade4(
    var id: Long,
    @META(size = 20)
-   var symbol: String,
+   var symbol: StringBuilder,
    var timestamp: Long,
    var price: Long,
    var amount: Long,
@@ -27,23 +27,23 @@ class StrNTest {
    fun shortStringRoundtrips() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE4))
 
-      Trade4(id = 1L, symbol = "HI", timestamp = 2L, price = 3L, amount = 4L).encodeTo(buffer)
+      Trade4(id = 1L, symbol = StringBuilder("HI"), timestamp = 2L, price = 3L, amount = 4L).encodeTo(buffer)
 
       val decoded = newTrade4()
       decoded.decodeFrom(buffer)
 
-      assertEquals("HI", decoded.symbol)
+      assertEquals("HI", decoded.symbol.toString())
    }
 
    @Test
    fun fullLengthStringRoundtrips() {
       val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE4))
 
-      Trade4(id = 1L, symbol = "12345678901234567890", timestamp = 2L, price = 3L, amount = 4L).encodeTo(buffer)
+      Trade4(id = 1L, symbol = StringBuilder("12345678901234567890"), timestamp = 2L, price = 3L, amount = 4L).encodeTo(buffer)
 
       val decoded = newTrade4()
       decoded.decodeFrom(buffer)
 
-      assertEquals("12345678901234567890", decoded.symbol)
+      assertEquals("12345678901234567890", decoded.symbol.toString())
    }
 }
