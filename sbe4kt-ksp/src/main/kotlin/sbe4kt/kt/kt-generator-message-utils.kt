@@ -63,12 +63,13 @@ internal fun generateUtilsSection(message: Message): String {
       "            }\n" +
       (if (hasFlatContent) {
       "            row.metadata == \"root\" || row.sbeType == \"group\" -> {\n" +
-      "               if (result.isNotEmpty()) result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
+      "               if (result.isNotEmpty() && result.last().metadata != \"separator\") result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
       "               result.add(row)\n" +
       "               result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
       "               when (row.field) {\n" +
       flatBranches.indent(18) + "\n" +
       "               }\n" +
+      "               result.add(SbeLayoutRow(0, \"\", \"\", \"\", 0, \"\", metadata = \"separator\"))\n" +
       "            }\n"
       } else "") +
       "            else -> result.add(row)\n" +
