@@ -77,21 +77,20 @@ fun randomTrade(
    amount: Long = Random.nextLong()
 ): Trade
 
-// encode/decode methods that allow to reuse any instance/buffer and return nubmer of bytes encoded/decoded
-fun encodeTrade(instance: Trade, buffer: UnsafeBuffer, offset: Int = 0): Int
-fun decodeTrade(instance: Trade, buffer: UnsafeBuffer, offset: Int = 0): Int
+// encode/decode methods that allow to reuse any instance/buffer and return number of bytes encoded/decoded
+fun encodeTrade(source: Trade, buffer: MutableDirectBuffer, offset: Int = 0): Int
+fun decodeTrade(target: Trade, buffer: DirectBuffer, offset: Int = 0): Int
 
 // some extension functions for readability
-fun Trade.encodeTo(buffer: UnsafeBuffer, offset: Int = 0): Int = encodeTrade(this, buffer, offset)
-fun Trade.decodeFrom(buffer: UnsafeBuffer, offset: Int = 0): Int = decodeTrade(this, buffer, offset)
+fun Trade.encodeTo(buffer: MutableDirectBuffer, offset: Int = 0): Int = encodeTrade(this, buffer, offset)
+fun Trade.decodeFrom(buffer: DirectBuffer, offset: Int = 0): Int = decodeTrade(this, buffer, offset)
 
-// 3 flyweight classes that allow to work directly with buffers without ever creating instances of our type
-class TradeRW
-class TradeW
-class TradeR
+// 2 flyweight classes that allow to work directly with buffers without ever creating instances of our type
+class TradeW  // write-only flyweight (wraps encoder)
+class TradeR  // read-only flyweight (wraps decoder)
 
 // and a helper function to verify layout of our message on wire
-fun Trade.printSbeLayout()
+fun Trade.printSbeLayout(flat: Boolean = false, verbose: Boolean = false)
 ```
 
 overall we should see tree of artifacts like this
@@ -126,9 +125,7 @@ randomTrade().printSbeLayout()
 which will print out a nice tabular breakdown of our message layout
 
 ```text
-┌──────────────────────────────────────────────────────────────────────┐
-│ Trade (totalSize = 44 bytes)                                         │
-├────────┬───────────┬────────┬──────────┬──────┬──────────────────────┤
+┌────────┬───────────┬────────┬──────────┬──────┬──────────────────────┐
 │ Offset │ Field     │ Type   │ SBE Type │ Size │ Value                │
 ├────────┼───────────┼────────┼──────────┼──────┼──────────────────────┤
 │ 0      │ [HEADER]  │ Header │          │ 8    │ 36|1|1|0             │
@@ -137,6 +134,7 @@ which will print out a nice tabular breakdown of our message layout
 │ 24     │ price     │ Long   │ int64    │ 8    │ -6199344808600958057 │
 │ 32     │ amount    │ Long   │ int64    │ 8    │ -2680085302222566953 │
 │ 40     │ symbol    │ Int    │ int32    │ 4    │ -53302703            │
+│ 44     │ [END]     │        │          │      │                      │
 └────────┴───────────┴────────┴──────────┴──────┴──────────────────────┘
 ```
 We can see that our message is 44 bytes in size, 8 of which are used for headers (standard for sbe?),
@@ -181,42 +179,44 @@ Encoder/Decoders are actually very simple classes and can often be inlined as JI
 But we can do much better. 
 
 ```kotlin
-   // we can create a flyweight which directly works with the buffer 
-   // all get/set operations are directly working with the buffer
-   val fw = TradeRW()
+   // we create a shared buffer and point separate read/write flyweights at it
+   val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE))
+   val w = TradeW(buffer, 0)
+   val r = TradeR(buffer, 0)
 
    // we can directly write data to the buffer
-   fw.id(1111)
-   fw.timestamp(System.currentTimeMillis())
-   fw.price(2222)
-   fw.amount(3333)
-   fw.symbol(42)
-   
+   w.id(1111L)
+   w.timestamp(System.currentTimeMillis())
+   w.price(2222L)
+   w.amount(3333L)
+   w.symbol(42)
+
    // we can directly read any field from the buffer
-   println(fw.id())
-   println(fw.timestamp())
-   println(fw.price())
-   println(fw.amount())
-   println(fw.symbol())
-   
+   println(r.id())
+   println(r.timestamp())
+   println(r.price())
+   println(r.amount())
+   println(r.symbol())
+
    // we can of course achieve the same as in encode/decode example before with flyweight
    // by writing contents of instance into buffer
-   fw.encodeFrom(trade)
+   w.encodeFrom(trade)
 
    // or reading the contents of the buffer into provided instance
-   fw.decodeInto(trade)
-   
+   r.wrap(buffer, 0) // re-wrap after write
+   r.decodeInto(trade)
+
    // we can of course point the flyweight to another buffer or offset at will
    // by default the flyweight will create correctly sized buffer if one isnt provided
-   fw.wrap(buffer, 0)
+   w.wrap(anotherBuffer, 0)
 ```
 
-Flyweights reuse the instances of encoders/decoders and they do less work compared to 
-normal `encode/decode` functions because they avoid the `wrap()` that has to be performed on each invcation. 
-Flyweight only has to `wrap()` the buffer once per jump. 
+Flyweights reuse the instances of encoders/decoders and they do less work compared to
+normal `encode/decode` functions because they avoid the `wrap()` that has to be performed on each invocation.
+Flyweight only has to `wrap()` the buffer once per jump.
 
-We also have specialized `ReadOnly/WriteOnly` variants of flyweights which further avoid excessive instructions. 
-If all you do is read from a flyweight it makes no sense to do `encoder.wrap()`.
+There are separate `R` (read-only) and `W` (write-only) flyweights.
+If all you do is read from a buffer it makes no sense to instantiate an encoder, and vice versa.
 
 Flyweights are more efficient than `encode/decode` functions (which are still 0 garbage but do few more instructions).
 
@@ -236,7 +236,7 @@ There are some conventions and defaults that you should be aware of, most of the
 * All fields are PREFERRED to be NOT nullable
   * SBE does not keep information if the field was set or not
   * If you absolutely want nullability use `allowNullableTypes=true`
-  * If you have many nullable fields and/or booleans you SHOULD use `useFlags`
+  * If you have many nullable fields and/or booleans you SHOULD use `compactFlags`
   * I RECOMMEND enforce non nulls via `requireNotNulls` at module level
 
 * All messages are PREFERRED be fixed sized.
@@ -294,16 +294,15 @@ fun main() { randomMsg().printSbeLayout() }
 You should see that the order is different than what was specified in definition.
 
 ```text
-┌────────────────────────────────────────────────────────────────────┐
-│ Msg (totalSize = 21 bytes)                                         │
-├────────┬──────────┬────────┬──────────┬──────┬─────────────────────┤
-│ Offset │ Field    │ Type   │ SBE Type │ Size │ Value               │
-├────────┼──────────┼────────┼──────────┼──────┼─────────────────────┤
-│ 0      │ [HEADER] │ Header │          │ 8    │ 13|1|1|0            │
-│ 8      │ f3       │ Long   │ int64    │ 8    │ 8356817513295047039 │
-│ 16     │ f2       │ Int    │ int32    │ 4    │ 793399309           │
-│ 20     │ f1       │ Byte   │ int8     │ 1    │ -70                 │
-└────────┴──────────┴────────┴──────────┴──────┴─────────────────────┘
+┌────────┬──────────┬────────┬──────────┬──────┬──────────────────────┐
+│ Offset │ Field    │ Type   │ SBE Type │ Size │ Value                │
+├────────┼──────────┼────────┼──────────┼──────┼──────────────────────┤
+│ 0      │ [HEADER] │ Header │          │ 8    │ 13|1|1|0             │
+│ 8      │ f3       │ Long   │ int64    │ 8    │ -4999045870703161879 │
+│ 16     │ f2       │ Int    │ int32    │ 4    │ 357827787            │
+│ 20     │ f1       │ Byte   │ int8     │ 1    │ 95                   │
+│ 21     │ [END]    │        │          │      │                      │
+└────────┴──────────┴────────┴──────────┴──────┴──────────────────────┘
 ```
 
 But we can see that `f1` is at the last position and is not aligned (beacuse `f2` has size of 4).
@@ -320,17 +319,16 @@ This is done such that next message when written after this will start at aligne
 Original message without alignment took 21 bytes of space while with padding it takes 32.
 
 ```text
-┌──────────────────────────────────────────────────────────────────────┐
-│ Msg (totalSize = 32 bytes)                                           │
-├────────┬───────────┬────────┬──────────┬──────┬──────────────────────┤
+┌────────┬───────────┬────────┬──────────┬──────┬──────────────────────┐
 │ Offset │ Field     │ Type   │ SBE Type │ Size │ Value                │
 ├────────┼───────────┼────────┼──────────┼──────┼──────────────────────┤
 │ 0      │ [HEADER]  │ Header │          │ 8    │ 24|1|1|0             │
-│ 8      │ f3        │ Long   │ int64    │ 8    │ -7207667731427379597 │
-│ 16     │ f2        │ Int    │ int32    │ 4    │ 1248514884           │
+│ 8      │ f3        │ Long   │ int64    │ 8    │ -1191638359794841922 │
+│ 16     │ f2        │ Int    │ int32    │ 4    │ -942094686           │
 │ 20     │ [PADDING] │        │          │ 4    │                      │
-│ 24     │ f1        │ Byte   │ int8     │ 1    │ 9                    │
+│ 24     │ f1        │ Byte   │ int8     │ 1    │ -9                   │
 │ 25     │ [PADDING] │        │          │ 7    │                      │
+│ 32     │ [END]     │        │          │      │                      │
 └────────┴───────────┴────────┴──────────┴──────┴──────────────────────┘
 ```
 The sbe schema will be changing accordingly to use offset attribute to achieve alignment. There are no extra fields used to create artificial spacing. Just offsets and allocations of the buffer space.
@@ -356,7 +354,7 @@ enum class SomeEnum { DEFAULT, VAlUE1, VALUE2 }
 @SBE
 data class Msg(var f1: SomeEnum)
 ```
-This will generate
+The generated SBE schema uses an enum type:
 
 ```xml
 <enum name='SomeEnum' encodingType='uint8'>
@@ -366,7 +364,9 @@ This will generate
 </enum>
 ```
 
-### Value classes 
+In the layout output the SBE Type column shows the underlying encoding (`int8`) while the Type column preserves the Kotlin enum name.
+
+### Value classes
 
 You can use value clases as well.
 
@@ -477,11 +477,11 @@ It no longer does any `wrap()` because it is already correctly positioned.
 Since you know exact sizes of message types (if you follow the recommended approach). 
 You can create ring buffers which have flyweights of given union type, and you can directly read write.
 
-There are 3 variations of these flyweights `RW`, `R`, `W`.
-So if you have a different type of worker that mostly reads or writes or you do not want to expose an interface that can write, 
-then you have an option to use the correct flyweight. 
+There are 2 variations of these flyweights `R` and `W`.
+If your component only reads from a buffer, use the `R` flyweight.
+If it only writes, use the `W` flyweight. Each wraps only the encoder or decoder it needs.
 
-Note they are completely different classes, you cannot cast `RW` into `R/W`.
+Note they are completely different classes, you cannot cast `R` into `W` or vice versa.
 
 When using these flyweights your buffers are your ojbects, there is no actual serialization going on.
 
@@ -1107,10 +1107,10 @@ and we would waste time serializing/deserializing this vs 0 serialization needed
 
 Using Boolean fields is often quite taxing, not only these create branches (because a byte/short needs to be converted to true/false) but they at the minimum take 1 byte to store. If you enable padding each one will cost 8 bytes.
 
-You can mitigate this unnecessary cost by using bitsets by using `useFlags = true`.
+You can mitigate this unnecessary cost by using bitsets via `compactFlags`. The value specifies the encoding size in bits (8, 16, 32, or 64).
 
 ```kotlin
-@SBE(useFlags = true)
+@SBE(compactFlags = 8)
 data class Order(
    var symbol: Long,
    var price: FPD,
@@ -1123,8 +1123,8 @@ data class Order(
 
 fun main() {
   val order = randomOrder()
-  order.printSbeLayout()
-  order.log()
+  order.printSbeLayout(flat = true)
+  println(order)
 }
 ```
 
@@ -1150,21 +1150,22 @@ This will use SBE bitset for storing boolean fields.
 You will see in the output that it uses each individual bit to store values for the Boolean fields.
 
 ```text
-┌──────────────────────────────────────────────────────────────────────────────────────────┐
-│ Order (totalSize = 33 bytes)                                                             │
-├────────┬───────────────┬─────────────────────────┬──────────┬──────┬─────────────────────┤
-│ Offset │ Field         │ Type                    │ SBE Type │ Size │ Value               │
-├────────┼───────────────┼─────────────────────────┼──────────┼──────┼─────────────────────┤
-│ 0      │ [HEADER]      │ Header                  │          │ 8    │ 25|1|1|0            │
-│ 8      │ symbol        │ Long                    │ int64    │ 8    │ 9205713467656431517 │
-│ 16     │ price         │ PackedFixedPointDecimal │ int64    │ 8    │ -2887126247.6035813 │
-│ 24     │ amount        │ PackedFixedPointDecimal │ int64    │ 8    │ 68.741992189043845  │
-│ 32     │ flags         │ OrderFlags              │ uint8    │ 1    │ [flags]             │
-│ 32     │   isAlgoOrder │ Boolean                 │ bit[0]   │ 1/8  │ true                │
-│ 32     │   isHidden    │ Boolean                 │ bit[1]   │ 1/8  │ true                │
-│ 32     │   isGTC       │ Boolean                 │ bit[2]   │ 1/8  │ true                │
-└────────┴───────────────┴─────────────────────────┴──────────┴──────┴─────────────────────┘
-Order(symbol=9205713467656431517, price=-2887126247.6035813, amount=68.741992189043845, isAlgoOrder=true, isHidden=true, isGTC=true)
+┌────────┬─────────────┬─────────────────────────┬──────────┬──────┬──────────────────────┐
+│ Offset │ Field       │ Type                    │ SBE Type │ Size │ Value                │
+├────────┼─────────────┼─────────────────────────┼──────────┼──────┼──────────────────────┤
+│ 0      │ [HEADER]    │ Header                  │          │ 8    │ 25|1|1|0             │
+│ 8      │ symbol      │ Long                    │ int64    │ 8    │ -9220671275453508366 │
+│ 16     │ price       │ PackedFixedPointDecimal │ int64    │ 8    │ 3603189682.6215527   │
+│ 24     │ amount      │ PackedFixedPointDecimal │ int64    │ 8    │ 4941571.07379157324  │
+├────────┼─────────────┼─────────────────────────┼──────────┼──────┼──────────────────────┤
+│ 32     │ flags       │ OrderFlags              │ uint8    │ 1    │ 2                    │
+├────────┼─────────────┼─────────────────────────┼──────────┼──────┼──────────────────────┤
+│ 32     │ isAlgoOrder │ Boolean                 │ bit 0    │ 1/8  │ false                │
+│ 32     │ isHidden    │ Boolean                 │ bit 1    │ 1/8  │ true                 │
+│ 32     │ isGTC       │ Boolean                 │ bit 2    │ 1/8  │ false                │
+│ 33     │ [END]       │                         │          │      │                      │
+└────────┴─────────────┴─────────────────────────┴──────────┴──────┴──────────────────────┘
+Order(symbol=-9220671275453508366, price=3603189682.6215527, amount=4941571.07379157324, isAlgoOrder=false, isHidden=true, isGTC=false)
 ```
 
 In this case its using uint8 but it will scale based on number of boolean fields upto `uint64` (64 boolean fields).
@@ -1315,20 +1316,18 @@ data class XY(
 
 fun main() {
    val buffer = UnsafeBuffer(ByteArray(1024))
-   val flyweight = SignalRW(buffer, 500)
+   val w = SignalW(buffer, 500)
 
-   flyweight
-      .f1(Direction.BUY)
-      .f2RW()
-         .time(Time(System.currentTimeMillis()))
-         .price(Price.fromExact("78000.0"))
+   w.f1(Direction.BUY)
+   w.f2()
+      .time(TimeId.now())
+      .price(Price.fromExact("78000.0"))
 
    val signal = newSignal()
-
-   flyweight.decodeInto(signal)
-   // we can also directly decode we are not using the flyweight
-   // it does the same thing but with extra steps and checks...
-   // signal.decodeFrom(buffer, 500) 
+   val r = SignalR(buffer, 500)
+   r.decodeInto(signal)
+   // we can also directly decode without the flyweight
+   // signal.decodeFrom(buffer, 500)
 
    signal.printSbeLayout()
 }
@@ -1336,15 +1335,14 @@ fun main() {
 If we attempt to wrap a buffer which does not have enough capcity left to encode the message of that flyweights type we will get runtime error during such attempt, because our flyweight (and encode) method knows the actual size of the message in advance.
 
 ```text
-────────────────────────────────────────────────────────────────────────────────────────┐
-│ Signal (totalSize = 25 bytes)                                                          │
-├────────┬──────────┬───────────┬───────────┬──────┬─────────────────────────────────────┤
-│ Offset │ Field    │ Type      │ SBE Type  │ Size │ Value                               │
-├────────┼──────────┼───────────┼───────────┼──────┼─────────────────────────────────────┤
-│ 0      │ [HEADER] │ Header    │           │ 8    │ 17|1|1|0                            │
-│ 8      │ f2       │ XY        │ XY        │ 16   │ XY(time=1770008258490, price=78000) │
-│ 24     │ f1       │ Direction │ Direction │ 1    │ BUY                                 │
-└────────┴──────────┴───────────┴───────────┴──────┴─────────────────────────────────────┘
+┌────────┬──────────┬───────────┬──────────┬──────┬───────────────────────────────────────────┐
+│ Offset │ Field    │ Type      │ SBE Type │ Size │ Value                                     │
+├────────┼──────────┼───────────┼──────────┼──────┼───────────────────────────────────────────┤
+│ 0      │ [HEADER] │ Header    │          │ 8    │ 17|1|1|0                                  │
+│ 8      │ f2       │ XY        │ XY       │ 16   │ XY(time=1774266884533000000, price=78000) │
+│ 24     │ f1       │ Direction │ int8     │ 1    │ BUY                                       │
+│ 25     │ [END]    │           │          │      │                                           │
+└────────┴──────────┴───────────┴──────────┴──────┴───────────────────────────────────────────┘
 ```
 If we check the schema we will see that KSP is using `sbe:composite`.
 
@@ -1358,13 +1356,12 @@ If we check the schema we will see that KSP is using `sbe:composite`.
    <type name='price' primitiveType='int64' offset='8'/>
 </composite>
 ```
-But it also defines flyweights for the composite. Which is accessible via special methods.
-See the source code for `.f2RW()`, since we know we are positioned correctly 
-this allows us to avoid any unnecessary `warp()` invocations when invoking `encoder.f2()`.
+But it also defines flyweights for the composite. Which is accessible via `.f2()` on either `R` or `W` flyweight.
+Since the flyweight is already positioned correctly, this avoids any unnecessary `wrap()` invocations when accessing the composite fields.
 
 ### Nesting other @SBE types
 
-You can nest other messages.
+You can nest other `@SBE` messages inside your message (not just structs).
 
 ```kotlin
 @SBE
@@ -1377,8 +1374,8 @@ enum class Direction { BUY, SELL }
 
 @SBE
 data class XY(
-   var time: Time,
-   var price: Price,
+   var time: TimeId,
+   var price: FPD,
 )
 
 fun main() {
@@ -1437,16 +1434,8 @@ data class Failure(var id: TimeId, var code: Int)
 @SBE(id = 1)
 data class Success(var id: TimeId, var result: Long)
 ```
-I'm still considering options but for now unions are stored as a composite.
-Another option is to declare each type in SBE but give them all same offset where the byte buffer is now...
-
-```xml
-<composite name='resultUnion'>
-  <type name='type' primitiveType='int32'/>
-  <type name='data' primitiveType='uint8' length='24'/>
-</composite>
-```
-The type is used as a discriminator and uses id of the message (TODO what to do about structs, those dont have an id).
+Union fields are stored as a `ByteArrayN` large enough to fit the biggest variant.
+The nested message's SBE header `templateId` acts as the discriminator — no extra bytes needed.
 
 ```xml
 <sbe:message name='Success' id='1' description='Success'>
@@ -1458,14 +1447,14 @@ The type is used as a discriminator and uses id of the message (TODO what to do 
    <field name='code' id='2' type='int32'/>
 </sbe:message>
 <sbe:message name='Wrapper' id='3' description='Wrapper'>
-   <field name='result' id='2' type='resultUnion'/>
+   <field name='result' id='2' type='ByteArray24'/>
    <field name='id' id='1' type='int64'/>
 </sbe:message>
 ```
 
-It is important that the ids are consistent, i recommend turning on the `requireMessageIds` for real usage. Adding new types will change order/id that is assigned. 
+It is important that the ids are consistent, I recommend turning on the `requireMessageIds` for real usage. Adding new types will change order/id that is assigned.
 
-Generated code of those messages is then used to deserialize the `data` field.
+Generated code of those messages is then used to encode/decode the union field using the `templateId` from the message header.
 
 ```kotlin
 fun main() {
@@ -1482,7 +1471,7 @@ fun main() {
    randomSuccess().printSbeLayout()
 }
 ```
-`resultUnion` field will have 4 extra bytes (thats the discriminator).
+The union field uses a `ByteArray24` (big enough for the largest variant). The nested message header's `templateId` identifies which type is stored — no extra discriminator bytes needed.
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -1490,9 +1479,10 @@ fun main() {
 ├────────┬──────────┬────────┬─────────────┬──────┬─────────────────────────────────────────────────────────┤
 │ Offset │ Field    │ Type   │ SBE Type    │ Size │ Value                                                   │
 ├────────┼──────────┼────────┼─────────────┼──────┼─────────────────────────────────────────────────────────┤
-│ 0      │ [HEADER] │ Header │             │ 8    │ 36|3|1|0                                                │
-│ 8      │ result   │ Any    │ resultUnion │ 28   │ Success(id=Nanos(nanos=1770216009303000000), result=42) │
-│ 36     │ id       │ TimeId │ int64       │ 8    │ Nanos(nanos=1770216009303000000)                        │
+│ 0      │ [HEADER] │ Header │             │ 8    │ 32|3|1|0                                   │
+│ 8      │ result   │ Any    │ ByteArray24 │ 24   │ Success(id=1770216009303000000, result=42) │
+│ 32     │ id       │ TimeId │ int64       │ 8    │ 1770216009303000000                        │
+│ 40     │ [END]    │        │             │      │                                            │
 └────────┴──────────┴────────┴─────────────┴──────┴─────────────────────────────────────────────────────────┘
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ Success (totalSize = 24 bytes)                                                   │
@@ -1500,9 +1490,10 @@ fun main() {
 │ Offset │ Field    │ Type   │ SBE Type │ Size │ Value                             │
 ├────────┼──────────┼────────┼──────────┼──────┼───────────────────────────────────┤
 │ 0      │ [HEADER] │ Header │          │ 8    │ 16|1|1|0                          │
-│ 8      │ id       │ TimeId │ int64    │ 8    │ Nanos(nanos=-7435250699869327733) │
-│ 16     │ result   │ Long   │ int64    │ 8    │ 6837095934708511301               │
-└────────┴──────────┴────────┴──────────┴──────┴───────────────────────────────────┘
+│ 8      │ id       │ TimeId │ int64    │ 8    │ 6734830158765650283  │
+│ 16     │ result   │ Long   │ int64    │ 8    │ -8414471807457556591 │
+│ 24     │ [END]    │        │          │      │                      │
+└────────┴──────────┴────────┴──────────┴──────┴──────────────────────┘
 ```
 
 ---
@@ -1513,7 +1504,7 @@ fun main() {
 3. [x] support `Enums`
 4. [x] support `Value` classes
 5. [x] support `typealias`
-6. [x] support `flyweight` 3 variants (`R` read only , `W` write only, `RW` read/write)
+6. [x] support `flyweight` 2 variants (`R` read only, `W` write only)
 7. [x] generate tests
 8. [x] support fixed size `byte[]` via `@META(size=N)`
 9. [x] support fixed size `String` via `@META(size=N)`
@@ -1526,8 +1517,8 @@ fun main() {
 16. [x] add support for unions
 17. [x] add support for tagging timestamp diffs in message (telemetry within message)
 18. [x] add support for autogenerated tests
-19. [ ] add support for nullability (adds a bool isSet$field)
-20. [ ] add support for `useFlags` nullability + normal boolean fields stored via bitset `sbe:set`
+19. [x] add support for nullability (adds a bool isSet$field via `allowNullableTypes`)
+20. [x] add support for `compactFlags` boolean fields stored via bitset `sbe:set`
 21. [ ] support for fixed size `Array` via `@META(size=N)`
 22. [ ] add support for some date time api objects
 23. [ ] add support for var length type `String/CharSequence` (disables flyweights)
