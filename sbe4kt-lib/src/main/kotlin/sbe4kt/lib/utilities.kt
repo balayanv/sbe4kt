@@ -112,6 +112,12 @@ class CSV(
 fun CharSet.randomStr(length: Int) = (1..length).map { this.chars.random() }.joinToString("")
 fun Random.nextStr(length: Int) = (1..length).map { nextChar() }.joinToString("")
 fun Random.nextChar() = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[nextInt(62)]
+fun Random.stringBuilder(): StringBuilder {
+   val cap = Random.nextInt(4, 18)
+   val sb = StringBuilder(cap)
+   repeat(cap) { sb.append(Random.nextChar()) }
+   return sb
+}
 fun Random.nextShort() = this.nextInt().toShort()
 
 fun Boolean.convertToByte(): Byte = if (this) 1.toByte() else 0.toByte()

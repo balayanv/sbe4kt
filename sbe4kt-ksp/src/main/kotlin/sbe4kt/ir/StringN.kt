@@ -10,11 +10,12 @@ internal data class StringN(val length: Int, val encoding: Encoding = Encoding.A
    override val sbeName = "CharArray$length${if (encoding == Encoding.UTF8) "U" else ""}"
    override val name = "StringBuilder"
    override val defaultValue = "StringBuilder()"
-   override val randomValue = "StringBuilder(Random.nextStr($length))"
+   override val randomValue = "Random.stringBuilder()"
    override val size = length
    override val packageStr = ""
    override val imports: Set<String> = setOf(
-      "sbe4kt.lib.nextStr"
+      "kotlin.random.Random",
+      "sbe4kt.lib.stringBuilder",
    )
 
    override fun encodeField(encoder: String, field: String, value: String) = "$encoder.$field($value)"
