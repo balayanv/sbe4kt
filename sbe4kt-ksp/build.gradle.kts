@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "sbe4kt"
-version = "0.2.0-SNAPSHOT"
+version = "2.0.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
