@@ -9,21 +9,23 @@ Also i do not like xml.
 # SBE4KT
 
 SBE4KT is a Kotlin Symbol Processor (a compiler plugin) with a simple goal : 
-to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs. 
+to eliminate the need for any manually written code to use  [SBE](https://github.com/real-logic/simple-binary-encoding) codecs (and augment it when it makes sense). 
 
 It adds support for lots of features not available in SBE via code generation, 
-using SBE Encoder/Decoders as the building blocks to support the features we all need on serialziation layer.
+using SBE Encoder/Decoders as the building blocks to support the features we all need on serialziation layer. Usually developers write these themselves.
 
-It uses your classes as reference/schema, builds intermediate representation of what your schema looks like, 
+SBE4KT uses your classes as reference/schema, builds intermediate representation of what your schema looks like, 
 then it generates `sbe-schema.xml` and compiles it via `sbetool`, 
 and generates number of high level kotlin extensions to use the codecs.
 
-A good serialization library should leave developers with no need to write custom code to do serialization. 
-This library is intentionally kept simple such that its easy to customise to generate what you need/want. Even if its not already supported, its easy to change the code. 
+I believe that a good serialization library should leave developers with no need to write custom code to do serialization. 
+This library is intentionally kept simple such that its easy to customise to generate what you need/want. Even if its not already supported, its easy to change the code.
 
 It also has flags to disable entire features so that developers do not take shortcuts with costly tradeoffs.
 
 ## Quick Start
+
+TODO : there is a significant update not reflected in readme yet, where SBE4KT also generates the codecs (Encoder/Decoder) but follows the same wire format as SBE (e.g. anything serialized with those is 100% SBE compatible and vice versa). This is done to get extra speed over SBE.
 
 To use it you need to annotate a data class with `@SBE` annotation.
 You can try with a simple class `example.kt`
@@ -77,13 +79,23 @@ fun randomTrade(
    amount: Long = Random.nextLong()
 ): Trade
 
-// encode/decode methods that allow to reuse any instance/buffer and return nubmer of bytes encoded/decoded
-fun encodeTrade(instance: Trade, buffer: UnsafeBuffer, offset: Int = 0): Int
-fun decodeTrade(instance: Trade, buffer: UnsafeBuffer, offset: Int = 0): Int
+// convenience encode/decode that wrap buffer and create encoder/decoder if not provided
+fun wrapAndEncodeTrade(source: Trade, buffer: MutableDirectBuffer, offset: Int = 0,
+   headerEncoder: MessageHeaderEncoder = MessageHeaderEncoder(),
+   tradeEncoder: TradeEncoder = TradeEncoder())
+fun wrapAndDecodeTrade(target: Trade, buffer: DirectBuffer, offset: Int = 0,
+   headerDecoder: MessageHeaderDecoder = MessageHeaderDecoder(),
+   tradeDecoder: TradeDecoder = TradeDecoder())
 
-// some extension functions for readability
-fun Trade.encodeTo(buffer: UnsafeBuffer, offset: Int = 0): Int = encodeTrade(this, buffer, offset)
-fun Trade.decodeFrom(buffer: UnsafeBuffer, offset: Int = 0): Int = decodeTrade(this, buffer, offset)
+// low-level encode/decode: no allocation, no wrapping, reuse pre-wrapped encoder/decoder
+fun encodeTrade(source: Trade, buffer: MutableDirectBuffer, offset: Int = 0,
+   headerEncoder: MessageHeaderEncoder, tradeEncoder: TradeEncoder)
+fun decodeTrade(target: Trade, buffer: DirectBuffer, offset: Int = 0,
+   headerDecoder: MessageHeaderDecoder, tradeDecoder: TradeDecoder)
+
+// query encoded/decoded length separately
+fun encodedLength(tradeEncoder: TradeEncoder): Int
+fun decodedLength(tradeDecoder: TradeDecoder): Int
 
 // 3 flyweight classes that allow to work directly with buffers without ever creating instances of our type
 class TradeRW
@@ -149,7 +161,7 @@ and one of the easiest ways to achive such alignment is to put biggest fixed siz
 Otherwise all our fields after symbol would have been misaligned. 
 Because it reordered it to last position, all our fields are aligned. 
 
-To encode/decode data you can simply use the generated extension functions and never deal directly in SBE encoder/decoders.
+To encode/decode data you can simply use the generated functions and never deal directly in SBE encoder/decoders.
 
 ```kotlin
    // lets create a random instance to serialize and deserialize
@@ -159,16 +171,11 @@ To encode/decode data you can simply use the generated extension functions and n
    val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE))
 
    // to serialize all we have to do is
-   encodeTrade(trade, buffer)
-   // or we can use the extension function (which does the same thing)
-   trade.encodeTo(buffer)
+   wrapAndEncodeTrade(trade, buffer)
 
    // to deserialize we can follow exact same pattern
    val newTrade = newTrade()
-
-   decodeTrade(newTrade, buffer)
-   // or we can use the extension function (which does the same thing)
-   newTrade.decodeFrom(buffer)
+   wrapAndDecodeTrade(newTrade, buffer)
 
    // and we can verify that the instances are equal
    assert(trade == newTrade)
@@ -223,9 +230,15 @@ Flyweights are more efficient than `encode/decode` functions (which are still 0 
 These are the basics (the overall high level interface) of the library, do follow the instructions of [Tutorial](#full-tutorial) section to get familiar with [all the features](#core-features-current-state-of-the-library) of the library.
 
 ---
-## Recommendations, Conventions and Defaults
+## History, Recommendations, Conventions and Defaults
 
-There are some conventions and defaults that you should be aware of, most of these are optional, but they are made defaults for a reason (do not expect good performance if you choose to deviate).
+SBE4KT is a port of a different project called CAPNP4KT which does the same but for [CapNProto](https://capnproto.org/) instead of SBE. Since i decided to use SBE I've also created this project (and this time open source it). Capnp variant is not open source since its tightly couppled with my custom projects and there is not much public interest in it (feel free to reach out if you're interested in that).
+
+I use kotlin for code generation and in my personal projects, so this library is geared towards taking full advantage of kotlins features, however if you're a java developer 99% of everything this library has to offer is still valid for you (kotlin has full interop with java). Another big reason is that kotlin code is much more compact, so code generation logic stays much simpler (because of type inference/extension methods etc).
+
+This library is primarily made for low latency and high performance systems. **The intended way to use it is with flyweights pointing to buffers directly reading and writing fixed sized messages from/to them.*
+
+There are some conventions and defaults that you should be aware of, most of these are optional, but they are made defaults for a reason. 
 
 * Always define your message ids in real systems (autogen ids are for convenience only)
   * You can enforce it via `requireMessageIds`
@@ -464,11 +477,7 @@ Looking at `Trade` example we can see what the generated flyweight really does w
    fun amount(amount: Long) = apply { encoder.amount(amount) }
 
    fun encodeFrom(source: Trade) = apply {
-      encoder.id(source.id)
-      encoder.timestamp(source.timestamp)
-      encoder.price(source.price)
-      encoder.amount(source.amount)
-      encoder.symbol(source.symbol)
+      encodeTrade(source, buffer, offset, headerEncoder, encoder)
    }
 ```
 
@@ -597,20 +606,20 @@ Here is a summary of what happens for each kind of change.
 
 | Change                          | Result                                                                 | Version     | Wire compatible        |
 |---------------------------------|------------------------------------------------------------------------|-------------|------------------------|
-| Add a field                     | Appended at end with `sinceVersion`                                    | incremented | yes                    |
-| Remove a field                  | **ERROR**, use `@META(removeAfter=N)` instead                          | —           | —                      |
-| Add a new message               | Gets unused ID, no `sinceVersion`                                      | incremented | yes                    |
-| Remove a message                | Warning, its ID is never reused                                        | incremented | yes                    |
+| No `last-sbe-schema.xml`        | Everything treated as brand new, version 0                             | 0           | n/a                    |
 | Reorder fields in source        | No effect, fields keep previous SBE order                              | unchanged   | yes                    |
-| Rename a field                  | **ERROR**, treated as remove + add, removal is not backward compatible | —           | —                      |
+| Add a field                     | Appended at end with `sinceVersion`                                    | incremented | yes                    |
+| Add a new message               | Gets unused ID, no `sinceVersion`                                      | incremented | yes                    |
+| Add an enum value at end        | OK, compiles                                                           | unchanged   | yes                    |
+| Remove a message                | Placeholder message left in xml to reserve its id                      | incremented | yes                    |
 | Rename a message                | Old treated as removed, new gets fresh ID                              | incremented | no (different message) |
+| Remove a field                  | **ERROR**, use `@META(removeAfter=N)` instead                          | —           | —                      |
+| Rename a field                  | **ERROR**, treated as remove + add, removal is not backward compatible | —           | —                      |
 | Change field type               | **ERROR**, compilation fails                                           | —           | —                      |
 | Modify a composite (`isStruct`) | **ERROR**, compilation fails                                           | —           | —                      |
 | Remove an enum value            | **ERROR**, compilation fails                                           | —           | —                      |
 | Reorder enum values             | **ERROR**, compilation fails (ordinals changed)                        | —           | —                      |
-| Add an enum value at end        | OK, compiles                                                           | unchanged   | yes                    |
 | Insert enum value in middle     | **ERROR**, compilation fails (shifts ordinals)                         | —           | —                      |
-| No `last-sbe-schema.xml`        | Everything treated as brand new, version 0                             | 0           | n/a                    |
 
 Note that renaming a field is treated as a remove + add. SBE identifies fields by position not name, so the old field stays at its offset as deprecated space and the new field is appended. This is wire compatible but both schemas grow.
 
@@ -1326,9 +1335,9 @@ fun main() {
    val signal = newSignal()
 
    flyweight.decodeInto(signal)
-   // we can also directly decode we are not using the flyweight
+   // we can also directly decode without the flyweight
    // it does the same thing but with extra steps and checks...
-   // signal.decodeFrom(buffer, 500) 
+   // wrapAndDecodeSignal(signal, buffer, 500)
 
    signal.printSbeLayout()
 }
@@ -1526,24 +1535,21 @@ fun main() {
 16. [x] add support for unions
 17. [x] add support for tagging timestamp diffs in message (telemetry within message)
 18. [x] add support for autogenerated tests
-19. [ ] add support for nullability (adds a bool isSet$field)
-20. [ ] add support for `useFlags` nullability + normal boolean fields stored via bitset `sbe:set`
-21. [ ] support for fixed size `Array` via `@META(size=N)`
-22. [ ] support for fixed size `Map` via `@META(size=N)`
-23. [ ] support for fixed size `Set` via `@META(size=N)`
-24. [ ] add support for some date time api objects
-25. [ ] add support for var length type `String/CharSequence` (disables flyweights)
-26. [ ] add support for var length type `List<T>` (disables flyweights)
-27. [ ] add support for var length type `Map<T>` (disables flyweights)
-28. [ ] add support for var length type `Set<T>` (disables flyweights)
-29. [ ] add support for `javaFriendly` code generation
-30. [x] add support for `version`, `since` via `last-sbe-schema.xml` baseline tracking
-31. [ ] add support for `generateTests` flag to control per message Test generation
-32. [ ] add configuration option `requireMessageIds` (fails compilation if a message has no id)
-33. [ ] add configuration option `requireNotNulls` (cannot use `allowNullableTypes`)
-34. [ ] add configuration option `requireFixedLength` (cannot use `allowVarLengthFields`)
-35. [x] publish `sbe4kt` as artefact to mvn local and make it usable from other projects as a plugin
-36. [ ] add flags to control strictness of schema evolution
+19. [x] add support for `version`, `since` via `last-sbe-schema.xml` baseline tracking
+20. [x] publish `sbe4kt` as artefact to mvn local and make it usable from other projects as a plugin
+21. [x] support for fixed size `Array` via `@META(size=N)`
+22. [ ] add support for some date time api objects
+23. [ ] add support for var length type `String/CharSequence`
+24. [ ] add support for var length type `List<T>`
+25. [ ] add support for `useFlags` nullability + normal boolean fields stored via bitset `sbe:set`
+26. [ ] add support for nullability (adds a bool isSet$field)
+27. [ ] update readme tutorial
+28. [ ] add flags to control strictness of schema evolution
+29. [ ] add support for `generateTests` flag to control per message Test generation
+30. [ ] add configuration option `requireNotNulls` (cannot use `allowNullableTypes`)
+31. [ ] add configuration option `requireFixedLength` (cannot use `allowVarLengthFields`)
+32. [ ] add support for `javaFriendly` code generation
+33. [ ] perf optimisations, analyse jit comp activity in `sbe4kt-benchmarks`
 
 ## Issues/Questions/Notes
 

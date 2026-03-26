@@ -1,11 +1,11 @@
 plugins {
-    kotlin("jvm") version "2.3.0"
+    kotlin("jvm") version "2.3.10"
     `java-gradle-plugin`
     `maven-publish`
 }
 
 group = "sbe4kt"
-version = "0.1.0"
+version = "1.0.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -17,6 +17,14 @@ dependencies {
 
 kotlin {
     jvmToolchain(25)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+java {
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
 }
 
 gradlePlugin {

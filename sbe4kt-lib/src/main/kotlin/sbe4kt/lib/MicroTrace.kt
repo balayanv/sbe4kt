@@ -39,13 +39,3 @@ value class MicroTag4(val value: Long = 0L) {
    override fun toString() = "[${getStr(get1())}, ${getStr(get2())}, ${getStr(get3())}, ${getStr(get4())}]"
    fun toDebugString() = "binary : [${value.toBinaryString(16)}]\nvalues : ${toString()}"
 }
-
-internal fun main() {
-   val timer = MicroTag4()
-      .set1(11.us)
-      .set2(22.us)
-//      .set3(33.us)
-      .set4(45.us)
-
-   println(timer.toDebugString())
-}

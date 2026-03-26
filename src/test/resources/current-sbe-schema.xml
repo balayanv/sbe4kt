@@ -14,10 +14,15 @@
          <type name='version' primitiveType='uint16'/>
       </composite>
 
-      <type name='ByteArray20' primitiveType='uint8' length='20'/>
-      <type name='ByteArray24' primitiveType='uint8' length='24'/>
-
+      <type name='CharArray10' primitiveType='char' length='10' characterEncoding='US-ASCII'/>
       <type name='CharArray20' primitiveType='char' length='20' characterEncoding='US-ASCII'/>
+      <type name='DoubleArray4' primitiveType='double' length='4'/>
+      <type name='FloatArray5' primitiveType='float' length='5'/>
+      <type name='ShortArray6' primitiveType='int16' length='6'/>
+      <type name='IntArray5' primitiveType='int32' length='5'/>
+      <type name='LongArray4' primitiveType='int64' length='4'/>
+      <type name='ByteArray8' primitiveType='uint8' length='8'/>
+      <type name='ByteArray24' primitiveType='uint8' length='24'/>
 
       <composite name='XY1'>
          <type name='time' primitiveType='int64'/>
@@ -26,45 +31,55 @@
       
    </types>
 
-   <sbe:message name='Msg3' id='1' description='sbe4kt generated sbe schema for Msg3'>
+   <sbe:message name='AllArraysMsg' id='1' description='sbe4kt generated sbe schema for AllArraysMsg'>
+      <field name='longs' id='4' type='LongArray4'/>
+      <field name='doubles' id='6' type='DoubleArray4'/>
+      <field name='ints' id='3' type='IntArray5'/>
+      <field name='floats' id='5' type='FloatArray5'/>
+      <field name='shorts' id='2' type='ShortArray6'/>
+      <field name='chars' id='7' type='CharArray10'/>
+      <field name='bytes' id='1' type='ByteArray8'/>
+   </sbe:message>
+   
+   <sbe:message name='Msg3' id='2' description='sbe4kt generated sbe schema for Msg3'>
       <field name='f1' id='1' type='int8'/>
    </sbe:message>
    
-   <sbe:message name='XY2' id='2' description='sbe4kt generated sbe schema for XY2'>
+   <sbe:message name='XY2' id='3' description='sbe4kt generated sbe schema for XY2'>
       <field name='time' id='1' type='int64'/>
       <field name='price' id='2' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Signal2' id='3' description='sbe4kt generated sbe schema for Signal2'>
+   <sbe:message name='Signal2' id='4' description='sbe4kt generated sbe schema for Signal2'>
       <field name='xy' id='2' type='ByteArray24'/>
       <field name='direction' id='1' type='int8'/>
    </sbe:message>
    
-   <sbe:message name='Msg5' id='4' description='sbe4kt generated sbe schema for Msg5'>
+   <sbe:message name='Msg5' id='5' description='sbe4kt generated sbe schema for Msg5'>
       <field name='f1' id='1' type='int8'/>
    </sbe:message>
    
-   <sbe:message name='Msg6' id='5' description='sbe4kt generated sbe schema for Msg6'>
+   <sbe:message name='Msg6' id='6' description='sbe4kt generated sbe schema for Msg6'>
       <field name='f1' id='1' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Msg7' id='6' description='sbe4kt generated sbe schema for Msg7'>
+   <sbe:message name='Msg7' id='7' description='sbe4kt generated sbe schema for Msg7'>
       <field name='f1' id='1' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Msg1' id='7' description='sbe4kt generated sbe schema for Msg1'>
+   <sbe:message name='Msg1' id='8' description='sbe4kt generated sbe schema for Msg1'>
       <field name='f3' id='3' type='int64'/>
       <field name='f2' id='2' type='int32'/>
       <field name='f1' id='1' type='int8'/>
    </sbe:message>
    
-   <sbe:message name='Msg2' id='8' blockLength='24' description='sbe4kt generated sbe schema for Msg2'>
+   <sbe:message name='Msg2' id='9' blockLength='24' description='sbe4kt generated sbe schema for Msg2'>
       <field name='f3' id='3' type='int64' offset='0'/>
       <field name='f2' id='2' type='int32' offset='8'/>
       <field name='f1' id='1' type='int8' offset='16'/>
    </sbe:message>
    
-   <sbe:message name='Trade2' id='9' description='sbe4kt generated sbe schema for Trade2'>
+   <sbe:message name='Trade2' id='10' description='sbe4kt generated sbe schema for Trade2'>
       <field name='id' id='1' type='int64'/>
       <field name='timestamp' id='3' type='int64'/>
       <field name='price' id='4' type='int64'/>
@@ -72,50 +87,50 @@
       <field name='symbol' id='2' type='int32'/>
    </sbe:message>
    
-   <sbe:message name='Signal1' id='10' description='sbe4kt generated sbe schema for Signal1'>
+   <sbe:message name='Signal1' id='11' description='sbe4kt generated sbe schema for Signal1'>
       <field name='f2' id='2' type='XY1'/>
       <field name='f1' id='1' type='int8'/>
    </sbe:message>
    
-   <sbe:message name='Msg8' id='11' description='sbe4kt generated sbe schema for Msg8'>
+   <sbe:message name='Msg8' id='12' description='sbe4kt generated sbe schema for Msg8'>
       <field name='time' id='1' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Msg4' id='12' description='sbe4kt generated sbe schema for Msg4'>
+   <sbe:message name='Msg4' id='13' description='sbe4kt generated sbe schema for Msg4'>
       <field name='f1' id='1' type='int32'/>
    </sbe:message>
    
-   <sbe:message name='Wrapper1' id='13' description='sbe4kt generated sbe schema for Wrapper1'>
+   <sbe:message name='Wrapper1' id='14' description='sbe4kt generated sbe schema for Wrapper1'>
       <field name='payload' id='2' type='ByteArray24'/>
       <field name='id' id='1' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Failure1' id='14' description='sbe4kt generated sbe schema for Failure1'>
+   <sbe:message name='Failure1' id='15' description='sbe4kt generated sbe schema for Failure1'>
       <field name='timestamp' id='1' type='int64'/>
       <field name='errorCode' id='2' type='int32'/>
    </sbe:message>
    
-   <sbe:message name='Success1' id='15' description='sbe4kt generated sbe schema for Success1'>
+   <sbe:message name='Success1' id='16' description='sbe4kt generated sbe schema for Success1'>
       <field name='timestamp' id='1' type='int64'/>
       <field name='value' id='2' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Wrapper2' id='16' description='sbe4kt generated sbe schema for Wrapper2'>
+   <sbe:message name='Wrapper2' id='17' description='sbe4kt generated sbe schema for Wrapper2'>
       <field name='payload' id='2' type='ByteArray24'/>
       <field name='id' id='1' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Failure2' id='17' description='sbe4kt generated sbe schema for Failure2'>
+   <sbe:message name='Failure2' id='18' description='sbe4kt generated sbe schema for Failure2'>
       <field name='timestamp' id='1' type='int64'/>
       <field name='errorCode' id='2' type='int32'/>
    </sbe:message>
    
-   <sbe:message name='Success2' id='18' description='sbe4kt generated sbe schema for Success2'>
+   <sbe:message name='Success2' id='19' description='sbe4kt generated sbe schema for Success2'>
       <field name='timestamp' id='1' type='int64'/>
       <field name='value' id='2' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Trade3' id='19' description='sbe4kt generated sbe schema for Trade3'>
+   <sbe:message name='Trade3' id='20' description='sbe4kt generated sbe schema for Trade3'>
       <field name='id' id='1' type='int64'/>
       <field name='symbol' id='2' type='int64'/>
       <field name='timestamp' id='3' type='int64'/>
@@ -123,7 +138,7 @@
       <field name='amount' id='5' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Trade4' id='20' description='sbe4kt generated sbe schema for Trade4'>
+   <sbe:message name='Trade4' id='21' description='sbe4kt generated sbe schema for Trade4'>
       <field name='symbol' id='2' type='CharArray20'/>
       <field name='id' id='1' type='int64'/>
       <field name='timestamp' id='3' type='int64'/>
@@ -131,7 +146,7 @@
       <field name='amount' id='5' type='int64'/>
    </sbe:message>
    
-   <sbe:message name='Trade1' id='21' description='sbe4kt generated sbe schema for Trade1'>
+   <sbe:message name='Trade1' id='22' description='sbe4kt generated sbe schema for Trade1'>
       <field name='id' id='1' type='int64'/>
       <field name='timestamp' id='3' type='int64'/>
       <field name='price' id='4' type='int64'/>
@@ -139,7 +154,7 @@
       <field name='symbol' id='2' type='int32'/>
    </sbe:message>
    
-   <sbe:message name='LatencyTracer' id='22' description='sbe4kt generated sbe schema for LatencyTracer'>
+   <sbe:message name='LatencyTracer' id='23' description='sbe4kt generated sbe schema for LatencyTracer'>
       <field name='created' id='1' type='int64'/>
       <field name='tags' id='2' type='int64'/>
    </sbe:message>

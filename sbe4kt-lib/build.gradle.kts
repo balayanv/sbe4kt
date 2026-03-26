@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "sbe4kt"
-version = "0.1.0"
+version = "1.0.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -12,10 +12,24 @@ repositories {
 
 dependencies {
     api("org.agrona:agrona:2.4.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 kotlin {
     jvmToolchain(25)
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+java {
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }
 
 publishing {

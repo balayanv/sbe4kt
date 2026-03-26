@@ -26,35 +26,37 @@ class CompositeTest {
 
    @Test
    fun sizeIs25() {
-      assertEquals(25, SBE_SIZE_SIGNAL1)
+      assertEquals(25, Signal1Codec.SIZE)
    }
 
    @Test
    fun flyweightCompositeAccess() {
       val buffer = UnsafeBuffer(ByteArray(1024))
-      val fw = Signal1RW(buffer, 100)
+      val fw = Signal1FW()
+      fw.buffer.wrap(buffer, 100, Signal1Codec.SIZE)
 
       fw.f1(Direction1.SELL)
-      fw.f2FW()
+      fw.f2()
          .time(TimeId(Nanos(9999000000L)))
          .price(FPD.fromExact("12345.67"))
 
       assertEquals(Direction1.SELL, fw.f1())
-      assertEquals(TimeId(Nanos(9999000000L)), fw.f2FW().time())
-      assertEquals(FPD.fromExact("12345.67"), fw.f2FW().price())
+      assertEquals(TimeId(Nanos(9999000000L)), fw.f2().time())
+      assertEquals(FPD.fromExact("12345.67"), fw.f2().price())
    }
 
    @Test
    fun compositeEncodeDecodeRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_SIGNAL1))
+      val buffer = UnsafeBuffer(ByteArray(Signal1Codec.SIZE))
 
-      Signal1(
+      val signal = Signal1(
          f1 = Direction1.BUY,
          f2 = XY1(time = TimeId(Nanos(1234000000L)), price = FPD.fromExact("78000.0")),
-      ).encodeTo(buffer)
+      )
+      Signal1Codec.encodeFrom(signal, buffer, 0)
 
       val decoded = newSignal1()
-      decoded.decodeFrom(buffer)
+      Signal1Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(Direction1.BUY, decoded.f1)
       assertEquals(TimeId(Nanos(1234000000L)), decoded.f2.time)

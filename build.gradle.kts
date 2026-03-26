@@ -1,9 +1,11 @@
+import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
+
 val jvmUnsafeAccessArg = "--sun-misc-unsafe-memory-access=allow"
-val jvmAddExportsArg = "--add-exports=java.base/jdk.internal.misc=ALL-UNNAMED"
+val jvmAddExportsArg = "--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED"
 
 plugins {
-   kotlin("jvm") version "2.3.0"
-   id("com.google.devtools.ksp") version "2.3.5"
+   kotlin("jvm") version "2.3.10"
+   id("com.google.devtools.ksp") version "2.3.6"
    id("sbe4kt")
    id("com.github.ben-manes.versions") version "0.53.0"
    application
@@ -12,6 +14,14 @@ plugins {
 
 kotlin {
    jvmToolchain(25)
+   compilerOptions {
+      jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+   }
+}
+
+java {
+   sourceCompatibility = JavaVersion.VERSION_17
+   targetCompatibility = JavaVersion.VERSION_17
 }
 
 ksp {
@@ -30,7 +40,7 @@ dependencies {
 
    implementation("uk.co.real-logic:sbe-all:1.37.1")
 
-   testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
+   testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")
    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -45,5 +55,12 @@ sourceSets {
    }
    test {
       kotlin { srcDirs("src/test/kotlin", layout.buildDirectory.dir("generated/ksp/test/kotlin")) }
+   }
+}
+
+tasks.withType<DependencyUpdatesTask> {
+   rejectVersionIf {
+      val v = candidate.version.uppercase()
+      listOf("-ALPHA", "-BETA", "-RC", "-M", ".M", "-DEV", "-SNAPSHOT").any { v.contains(it) }
    }
 }

@@ -11,12 +11,9 @@ internal fun KSP.generateStr64ValueClassFile(charSetDeclaration: KSClassDeclarat
    val packageName = charSetDeclaration.packageName.asString()
 
    val content = $$"""
-      |@file:Suppress("unused")
-      |
       |package $$packageName
       |
-      |import sbe4kt.CodecStr64
-      |import sbe4kt.lib.CharArraySequence
+      |import sbe4kt.lib.CodecStr64
       |import sbe4kt.lib.toBinaryString
       |
       |@JvmInline
@@ -39,12 +36,7 @@ internal fun KSP.generateStr64ValueClassFile(charSetDeclaration: KSClassDeclarat
       |   override operator fun get(index: Int) = codec.getChar(value, index)
       |
       |   override fun subSequence(startIndex: Int, endIndex: Int): CharSequence {
-      |      val len = endIndex - startIndex
-      |      val char = CharArraySequence(CharArray(len))
-      |      for (i in startIndex until endIndex) {
-      |         char.array[i] = codec.getChar(value, i)
-      |      }
-      |      return char
+      |      return String(CharArray(endIndex - startIndex) { codec.getChar(value, startIndex + it) })
       |   }
       |
       |   fun decode(appendable: Appendable) = codec.decode(value, appendable)

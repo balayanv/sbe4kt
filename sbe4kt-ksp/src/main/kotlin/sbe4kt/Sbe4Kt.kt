@@ -8,6 +8,7 @@ import com.google.devtools.ksp.validate
 import sbe4kt.ir.DeferredTypeException
 import sbe4kt.ir.Schema
 import sbe4kt.ir.Struct
+import sbe4kt.kt.generateArraySupportFile
 import sbe4kt.kt.generateKotlinExtensionsForMessage
 import sbe4kt.kt.generateStr64ValueClassFile
 import sbe4kt.kt.generateStructFile
@@ -139,6 +140,7 @@ internal object KSP : SymbolProcessor {
       val compositesUsedInMessages = ir.messages.flatMap { message ->
          message.fields.mapNotNull { field ->
             (field.type as? Struct)?.name
+               ?: (field.type as? sbe4kt.ir.ArrayN)?.takeIf { it.isStruct }?.structType?.name
          }
       }.toSet()
 
@@ -149,6 +151,15 @@ internal object KSP : SymbolProcessor {
             KSP.generateStructFile(struct, needsFlyweights)
          }
       }
+      // Generate array codec/FW support files per package that needs them
+      val primitiveElementTypes = ir.arraySizes.map { it.first }.filterNot { it is Struct }.toSet()
+      if (primitiveElementTypes.isNotEmpty() || ir.arraySizes.any { it.first is Struct }) {
+         val packages = ir.messages.map { it.packageStr }.toSet()
+         for (pkg in packages) {
+            generateArraySupportFile(pkg, primitiveElementTypes)
+         }
+      }
+
       ir.messages.forEach { message ->
          KSP.generateKotlinExtensionsForMessage(message)
          KSP.generateTestsForMessage(message)

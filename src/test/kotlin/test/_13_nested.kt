@@ -26,20 +26,21 @@ class NestedMessageTest {
 
    @Test
    fun signal2SizeIs33() {
-      assertEquals(33, SBE_SIZE_SIGNAL2)
+      assertEquals(33, Signal2Codec.SIZE)
    }
 
    @Test
    fun nestedMessageRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_SIGNAL2))
+      val buffer = UnsafeBuffer(ByteArray(Signal2Codec.SIZE))
 
-      Signal2(
+      val signal = Signal2(
          direction = Direction2.SELL,
          xy = XY2(time = TimeId(Nanos(1000000000L)), price = FPD.fromExact("100.5")),
-      ).encodeTo(buffer)
+      )
+      Signal2Codec.encodeFrom(signal, buffer, 0)
 
       val decoded = newSignal2()
-      decoded.decodeFrom(buffer)
+      Signal2Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(Direction2.SELL, decoded.direction)
       assertEquals(TimeId(Nanos(1000000000L)), decoded.xy.time)
@@ -48,16 +49,16 @@ class NestedMessageTest {
 
    @Test
    fun flyweightNestedMessageAccess() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_SIGNAL2))
-      val fw = Signal2RW(buffer, 0)
+      val buffer = UnsafeBuffer(ByteArray(Signal2Codec.SIZE))
+      val fw = Signal2FW(buffer)
 
       fw.direction(Direction2.BUY)
-      fw.xyFW()
+      fw.xy()
          .time(TimeId(Nanos(7777000000L)))
          .price(FPD.fromExact("55.55"))
 
       assertEquals(Direction2.BUY, fw.direction())
-      assertEquals(TimeId(Nanos(7777000000L)), fw.xyFW().time())
-      assertEquals(FPD.fromExact("55.55"), fw.xyFW().price())
+      assertEquals(TimeId(Nanos(7777000000L)), fw.xy().time())
+      assertEquals(FPD.fromExact("55.55"), fw.xy().price())
    }
 }

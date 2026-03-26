@@ -18,8 +18,8 @@ class FlyweightsTest {
 
    @Test
    fun rwDirectSetAndGet() {
-      val fw = Trade2RW()
-      fw.id(1111L).symbol(42).timestamp(2222L).price(3333L).amount(4444L)
+      val fw = Trade2FW()
+      fw.header().id(1111L).symbol(42).timestamp(2222L).price(3333L).amount(4444L)
 
       assertEquals(1111L, fw.id())
       assertEquals(42, fw.symbol())
@@ -35,12 +35,11 @@ class FlyweightsTest {
 
    @Test
    fun writeOnlyThenReadOnly() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE2))
+      val buffer = UnsafeBuffer(ByteArray(Trade2Codec.SIZE))
 
-      Trade2W(buffer, 0)
-         .id(100L).symbol(200).timestamp(300L).price(400L).amount(500L)
+      Trade2FW(buffer).id(100L).symbol(200).timestamp(300L).price(400L).amount(500L)
 
-      val r = Trade2R(buffer, 0)
+      val r = Trade2FW(buffer)
       assertEquals(100L, r.id())
       assertEquals(200, r.symbol())
       assertEquals(300L, r.timestamp())
@@ -49,15 +48,20 @@ class FlyweightsTest {
    }
 
    @Test
-   fun wrapRepositions() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE2 * 2))
-      val fw = Trade2RW(buffer, 0)
-
+   fun bufferWrapRepositions() {
+      val data = ByteArray(Trade2Codec.SIZE * 2)
+      val fw = Trade2FW()
+      fw.buffer.wrap(data, 0, Trade2Codec.SIZE)
       fw.id(1L)
-      fw.wrap(buffer, SBE_SIZE_TRADE2)
+
+      fw.buffer.wrap(data, Trade2Codec.SIZE, Trade2Codec.SIZE)
       fw.id(2L)
 
-      assertEquals(1L, Trade2R(buffer, 0).id())
-      assertEquals(2L, Trade2R(buffer, SBE_SIZE_TRADE2).id())
+      val r = Trade2FW()
+      r.buffer.wrap(data, 0, Trade2Codec.SIZE)
+      assertEquals(1L, r.id())
+
+      r.buffer.wrap(data, Trade2Codec.SIZE, Trade2Codec.SIZE)
+      assertEquals(2L, r.id())
    }
 }

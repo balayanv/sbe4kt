@@ -18,18 +18,18 @@ class QuickStartTest {
 
    @Test
    fun sizeIs44() {
-      assertEquals(44, SBE_SIZE_TRADE1)
+      assertEquals(44, Trade1Codec.SIZE)
    }
 
    @Test
    fun encodeAndDecode() {
       val trade = Trade1(id = 111L, symbol = 42, timestamp = 222L, price = 333L, amount = 444L)
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE1))
+      val buffer = UnsafeBuffer(ByteArray(Trade1Codec.SIZE))
 
-      trade.encodeTo(buffer)
+      Trade1Codec.encodeFrom(trade, buffer, 0)
 
       val decoded = newTrade1()
-      decoded.decodeFrom(buffer)
+      Trade1Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals(trade, decoded)
    }

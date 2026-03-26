@@ -143,33 +143,13 @@ internal data class Message(
       }
    }
 
-   // When used as a field in another message, handle as nested
-   override fun howToEncodeFromSource(encoder: String, field: String, instance: String): String {
-      // encoder is "signalEncoder" or "xyEncoder" etc -> "SignalEncoder" or "XYEncoder"
-      val encoderClass = encoder.replaceFirstChar { it.uppercase() }
-      return "encode${name}($instance.$field, buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${encoderClass}.${field}EncodingOffset())"
-   }
-
-   override fun howToDecodeIntoTarget(decoder: String, field: String, instance: String): String {
-      // decoder is "signalDecoder" or "xyDecoder" etc -> "SignalDecoder" or "XYDecoder"
-      val decoderClass = decoder.replaceFirstChar { it.uppercase() }
-      return "decode${name}($instance.$field, buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${decoderClass}.${field}EncodingOffset())"
-   }
-
-   override fun fwSetter(encoder: String, field: String): String {
-      return "${field}FW.encodeFrom($field)"
-   }
-
-   override fun fwGetter(decoder: String, field: String): String {
-      return "new${name}().also { ${field}FW.decodeInto(it) }"
-   }
-
    fun sourceFiles(): Array<KSFile> {
       // todo cleanup
       val dependentFiles = mutableSetOf(declaration.containingFile!!)
       fields.forEach { field ->
          when (val type = field.type) {
             is Struct -> type.declaration.containingFile?.let { dependentFiles.add(it) }
+            is ArrayN -> if (type.isStruct) type.structType.declaration.containingFile?.let { dependentFiles.add(it) }
             is Message -> type.declaration.containingFile?.let { dependentFiles.add(it) }
             else -> {} // Primitive types don't have source files
          }
@@ -187,10 +167,20 @@ internal data class Message(
          "char" -> 1
          else -> {
             val byteArrayMatch = Regex("ByteArray(\\d+)").matchEntire(sbeType)
-            val charArrayMatch = Regex("CharArray(\\d+)U?").matchEntire(sbeType)
+            val charArrayMatch = Regex("CharArray(\\d+)").matchEntire(sbeType)
+            val shortArrayMatch = Regex("ShortArray(\\d+)").matchEntire(sbeType)
+            val intArrayMatch = Regex("IntArray(\\d+)").matchEntire(sbeType)
+            val longArrayMatch = Regex("LongArray(\\d+)").matchEntire(sbeType)
+            val floatArrayMatch = Regex("FloatArray(\\d+)").matchEntire(sbeType)
+            val doubleArrayMatch = Regex("DoubleArray(\\d+)").matchEntire(sbeType)
             when {
                byteArrayMatch != null -> byteArrayMatch.groupValues[1].toInt()
                charArrayMatch != null -> charArrayMatch.groupValues[1].toInt()
+               shortArrayMatch != null -> shortArrayMatch.groupValues[1].toInt() * 2
+               intArrayMatch != null -> intArrayMatch.groupValues[1].toInt() * 4
+               longArrayMatch != null -> longArrayMatch.groupValues[1].toInt() * 8
+               floatArrayMatch != null -> floatArrayMatch.groupValues[1].toInt() * 4
+               doubleArrayMatch != null -> doubleArrayMatch.groupValues[1].toInt() * 8
                else -> 8
             }
          }
@@ -204,15 +194,10 @@ internal data class Message(
       imports.add("org.agrona.DirectBuffer")
       imports.add("org.agrona.MutableDirectBuffer")
       imports.add("org.agrona.concurrent.UnsafeBuffer")
-      imports.add("sbe4kt.MessageHeaderEncoder")
-      imports.add("sbe4kt.MessageHeaderDecoder")
+      imports.add("java.nio.ByteBuffer")
       imports.add("sbe4kt.lib.CSV")
-      imports.add("sbe4kt.${name}Encoder")
-      imports.add("sbe4kt.${name}Decoder")
       imports.add(declaration.importName())
       fields.onEach { imports.addAll(it.type.imports) }
-
-      // Union allowed types' encoder/decoder imports are already included via field.type.imports chain
 
       return imports
          .filter { it.substringBeforeLast('.') != packageName && it != packageName }

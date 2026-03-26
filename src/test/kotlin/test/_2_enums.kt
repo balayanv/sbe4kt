@@ -41,13 +41,13 @@ class EnumsTest {
 
    @Test
    fun eachEnumValueRoundtrips() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_MSG3))
+      val buffer = UnsafeBuffer(ByteArray(Msg3Codec.SIZE))
       val target = Msg3(SomeEnum.V0)
 
       for (entry in SomeEnum.entries) {
          val source = Msg3(entry)
-         encodeMsg3(source, buffer)
-         decodeMsg3(target, buffer)
+         Msg3Codec.encodeFrom(source, buffer, 0)
+         Msg3Codec.decodeInto(target, buffer, 0)
          assertEquals(entry, target.f1) { "Failed for $entry (ordinal=${entry.ordinal}): got ${target.f1}" }
       }
       println("All ${SomeEnum.entries.size} enum variants encode/decode correctly!")

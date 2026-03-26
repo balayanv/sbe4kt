@@ -3,43 +3,88 @@ package sbe4kt.kt
 import com.google.devtools.ksp.processing.Dependencies
 import sbe4kt.KSP
 import sbe4kt.ir.Message
-import sbe4kt.util.sbeSizeConstant
+import sbe4kt.ir.ArrayN
+import sbe4kt.util.indent
 import sbe4kt.util.trimTemplate
 
 internal fun generateTestsSection(message: Message): String {
    val className = message.name
-   val sizeConstName = className.sbeSizeConstant()
+   val codecName = "${className}Codec"
+
+   val hasUnsupportedFields = message.fields.any { !isSupportedCodecType(it.type) }
+   if (hasUnsupportedFields) return "// Tests skipped: $className contains unsupported field types"
+
+   val hasArrayFields = message.fields.any { it.type is ArrayN }
+   val assertFn = if (hasArrayFields) "assertFieldsEqual" else "assertEquals"
+
+   val assertHelper = if (hasArrayFields) {
+      val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
+      val assertions = fieldsDecOrder.joinToString("\n") { field ->
+         if (field.type is ArrayN) {
+            "assertArrayEquals(expected.${field.name}, actual.${field.name}, \"${field.name}\")"
+         } else {
+            "assertEquals(expected.${field.name}, actual.${field.name}, \"${field.name}\")"
+         }
+      }
+      """
+      |
+      |   private fun assertFieldsEqual(expected: $className, actual: $className) {
+      |${assertions.indent(6)}
+      |   }""".trimTemplate()
+   } else ""
 
    return """
       |internal class ${className}Test {
-      |
+      |$assertHelper
       |   @Test
-      |   fun testRandomValues() {
-      |      val buffer = UnsafeBuffer(ByteArray($sizeConstName))
+      |   fun testFlyweightRoundTrip() {
+      |      val fw = ${className}FW()
       |      repeat(100) {
       |         val original = random$className()
-      |         val bytesWritten = original.encodeTo(buffer)
-      |         
+      |         fw.encodeFrom(original)
+      |
       |         val decoded = new$className()
-      |         val bytesRead = decoded.decodeFrom(buffer)
-      |         
-      |         assertTrue(bytesWritten > 0)
-      |         assertEquals(bytesWritten, bytesRead)
-      |         assertEquals(original, decoded)
+      |         fw.decodeInto(decoded)
+      |
+      |         $assertFn(original, decoded)
       |      }
       |   }
       |
       |   @Test
-      |   fun testFlyweights() {
-      |      val wrapper = ${className}RW()
+      |   fun testCodecCorrectness() {
+      |      val c2cBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
+      |      val s2sBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
+      |      val c2sBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
+      |      val s2cBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
+      |      val c2cFw = ${className}FW(c2cBuffer)
+      |      val c2sFw = ${className}FW(c2sBuffer)
+      |      val s2cFw = ${className}FW(s2cBuffer)
+      |
       |      repeat(100) {
       |         val original = random$className()
-      |         wrapper.encodeFrom(original)
+      |         val c2c = new$className()
+      |         c2cFw.encodeFrom(original).decodeInto(c2c)
       |
-      |         val decoded = new$className()
-      |         wrapper.decodeInto(decoded)
+      |         val s2s = new$className()
+      |         encode${className}SBE(original, s2sBuffer, 0)
+      |         decode${className}SBE(s2s, s2sBuffer, 0)
       |
-      |         assertEquals(original, decoded)
+      |         val c2s = new$className()
+      |         c2sFw.encodeFrom(original)
+      |         decode${className}SBE(c2s, c2sBuffer, 0)
+      |
+      |         val s2c = new$className()
+      |         encode${className}SBE(original, s2cBuffer, 0)
+      |         s2cFw.decodeInto(s2c)
+      |
+      |         assertEquals(c2cBuffer, s2sBuffer)
+      |         assertEquals(s2sBuffer, c2sBuffer)
+      |         assertEquals(c2sBuffer, s2cBuffer)
+      |
+      |         $assertFn(original, c2c)
+      |         $assertFn(original, s2s)
+      |         $assertFn(original, c2s)
+      |         $assertFn(original, s2c)
       |      }
       |   }
       |}
@@ -60,12 +105,15 @@ internal fun KSP.generateTestsForMessage(message: Message) {
    )
 
    // Generate imports section
-   val testImports = setOf(
+   val hasArrayFields = message.fields.any { it.type is ArrayN }
+   val testImports = mutableSetOf(
       "org.agrona.concurrent.UnsafeBuffer",
       "org.junit.jupiter.api.Test",
       "org.junit.jupiter.api.Assertions.assertEquals",
-      "org.junit.jupiter.api.Assertions.assertTrue"
    )
+   if (hasArrayFields) {
+      testImports.add("org.junit.jupiter.api.Assertions.assertArrayEquals")
+   }
 
    val allImports = (message.allImports() + testImports).sorted()
    val importsSection = allImports.joinToString("\n") { "import $it" }
@@ -76,8 +124,6 @@ internal fun KSP.generateTestsForMessage(message: Message) {
    // Write the complete file
    file.bufferedWriter().use {
       it.write("""
-         |@file:Suppress("unused")
-         |
          |package $packageName
          |
          |$importsSection

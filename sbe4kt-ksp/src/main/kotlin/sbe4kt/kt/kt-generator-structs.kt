@@ -22,81 +22,50 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
    val importStatements = imports.joinToString("\n") { "import $it" }
 
    val fieldsDecOrder = struct.fields.sortedBy { it.declarationOrder }
-   val defaultParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.defaultValue}," }
-   val randomParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.randomValue}," }
-   val args = fieldsDecOrder.joinToString(", ") { it.name }
+   val defaultArgs = fieldsDecOrder.joinToString(", ") { it.type.defaultValue }
+   val randomArgs = fieldsDecOrder.joinToString(", ") { it.type.randomValue }
 
    val content = if (!needsFlyweights) {
-      // Structs without flyweights only get helper functions
-      // (e.g., composites used only in unions don't have encoder/decoder classes)
       """
-      |@file:Suppress("unused")
-      |
       |package $packageName
       |
       |$importStatements
       |
-      |@JvmOverloads
-      |fun new${struct.name}(
-      |${defaultParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |fun new${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($defaultArgs)
       |}
       |
-      |@JvmOverloads
-      |fun random${struct.name}(
-      |${randomParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |fun random${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($randomArgs)
       |}
       |""".trimTemplate()
    } else {
-      // Non-composites get full flyweights
-      val readMethods = struct.fields.joinToString("\n") { "fun ${it.name}() = ${it.type.convertFromSbe("decoder.${it.name}()")}" }
-      val writeMethods = struct.fields.joinToString("\n") { "fun ${it.name}(${it.name}: ${it.type.name}) = apply { encoder.${it.name}(${it.type.convertToSbe(it.name)}) }" }
+      val codecSection = generateCompositeCodecSection(struct)
+      val rwSection = generateCompositeFWSection(struct)
+      val printLayoutSection = generateStructPrintLayout(struct)
 
       """
-      |@file:Suppress("unused")
-      |
       |package $packageName
       |
       |$importStatements
-      |import sbe4kt.${struct.name}Encoder
-      |import sbe4kt.${struct.name}Decoder
       |
-      |@JvmOverloads
-      |fun new${struct.name}(
-      |${defaultParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |import org.agrona.DirectBuffer
+      |import org.agrona.MutableDirectBuffer
+      |import org.agrona.concurrent.UnsafeBuffer
+      |
+      |fun new${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($defaultArgs)
       |}
       |
-      |@JvmOverloads
-      |fun random${struct.name}(
-      |${randomParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
+      |fun random${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($randomArgs)
       |}
       |
-      |class ${struct.name}RW(
-      |   private var encoder: ${struct.name}Encoder,
-      |   private var decoder: ${struct.name}Decoder,
-      |) {
-      |${readMethods.indent(3)}
-      |${writeMethods.indent(3)}
-      |}
+      |$codecSection
       |
-      |class ${struct.name}R(
-      |   private var decoder: ${struct.name}Decoder,
-      |) {
-      |${readMethods.indent(3)}
-      |}
+      |$rwSection
       |
-      |class ${struct.name}W(
-      |   private var encoder: ${struct.name}Encoder,
-      |) {
-      |${writeMethods.indent(3)}
-      |}
+      |$printLayoutSection
       |""".trimTemplate()
    }
 
@@ -110,27 +79,29 @@ internal fun KSP.generateStructFile(struct: Struct, needsFlyweights: Boolean = t
 }
 
 internal fun KSP.generateComposite(struct: Composite): String {
-   val readMethods = struct.fields.joinToString("\n") { "fun ${it.name}() = ${it.type.convertFromSbe("decoder.${it.name}()")}" }
-   val writeMethods = struct.fields.joinToString("\n") { "fun ${it.name}(${it.name}: ${it.type.name}) = apply { encoder.${it.name}(${it.type.convertToSbe(it.name)}) }" }
-
    val fieldsDecOrder = struct.fields.sortedBy { it.declarationOrder }
-   val defaultParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.defaultValue}," }
-   val randomParams = fieldsDecOrder.joinToString("\n") { "${it.name}: ${it.type.name} = ${it.type.randomValue}," }
-   val args = fieldsDecOrder.joinToString(", ") { it.name }
+   val defaultArgs = fieldsDecOrder.joinToString(", ") { it.type.defaultValue }
+   val randomArgs = fieldsDecOrder.joinToString(", ") { it.type.randomValue }
 
-   val sortedFields = struct.fields.sortedBy { it.sbeOrder }
+   return """
+      |fun new${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($defaultArgs)
+      |}
+      |
+      |fun random${struct.name}(): ${struct.name} {
+      |   return ${struct.name}($randomArgs)
+      |}
+      |""".trimTemplate()
+}
 
-   // Calculate actual encoded length (last field offset + size)
-   val encodedLength = if (sortedFields.isEmpty()) 0 else {
-      val lastField = sortedFields.last()
-      lastField.offset + lastField.type.size
-   }
+private fun generateStructPrintLayout(struct: Struct): String {
+   val fieldsSbeOrder = struct.fields.sortedBy { it.sbeOrder }
+   val encodedLength = struct.encodedLength
 
    val printLayoutRows = buildString {
-      for ((index, field) in sortedFields.withIndex()) {
-         // Show padding before field if there is a gap
+      for ((index, field) in fieldsSbeOrder.withIndex()) {
          if (struct.usePadding && index > 0) {
-            val prevField = sortedFields[index - 1]
+            val prevField = fieldsSbeOrder[index - 1]
             val expectedOffset = prevField.offset + prevField.type.size
             val paddingSize = field.offset - expectedOffset
             if (paddingSize > 0) {
@@ -138,7 +109,6 @@ internal fun KSP.generateComposite(struct: Composite): String {
             }
          }
 
-         // Show the field itself
          val typeName = field.type.name
          val sbeName = field.type.sbeName
          val size = field.type.size
@@ -148,46 +118,15 @@ internal fun KSP.generateComposite(struct: Composite): String {
    }.trimEnd()
 
    return """
-      |@JvmOverloads
-      |fun new${struct.name}(
-      |${defaultParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
-      |}
-      |
-      |@JvmOverloads
-      |fun random${struct.name}(
-      |${randomParams.indent(3)}
-      |): ${struct.name} {
-      |   return ${struct.name}($args)
-      |}
-      |
-      |class ${struct.name}RW(
-      |   private var encoder: ${struct.name}Encoder,
-      |   private var decoder: ${struct.name}Decoder,
-      |) {
-      |${readMethods.indent(3)}
-      |${writeMethods.indent(3)}
-      |}
-      |
-      |class ${struct.name}R(
-      |   private var decoder: ${struct.name}Decoder,
-      |) {
-      |${readMethods.indent(3)}
-      |}
-      |
-      |class ${struct.name}W(
-      |   private var encoder: ${struct.name}Encoder,
-      |) {
-      |${writeMethods.indent(3)}
+      |fun ${struct.name}.sbeLayout() : CSV {
+      |   return CSV()
+      |      .info("${struct.name} (totalSize = $encodedLength bytes)")
+      |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
+      |      .separator()
+      |${printLayoutRows.indent(6)}
       |}
       |
       |fun ${struct.name}.printSbeLayout() {
-      |   CSV()
-      |      .info("${struct.name} (totalSize = $encodedLength bytes)")
-      |      .addHeader("Offset", "Field", "Type", "SBE Type", "Size", "Value")
-      |${printLayoutRows.indent(6)}
-      |      .print()
-      |}
-      |""".trimTemplate()
+      |   sbeLayout().print()
+      |}""".trimTemplate()
 }

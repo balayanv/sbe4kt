@@ -9,10 +9,6 @@ import sbe4kt.lib.MicroTag4
 import sbe4kt.lib.TimeId
 import sbe4kt.lib.us
 
-/**
- * Some sort of diagnostic message (like heartbeat), that traces trough multiple hot path services,
- * to collect realtime telemetry data...
- */
 @SBE
 data class LatencyTracer(
    var created: TimeId,
@@ -25,10 +21,7 @@ class TagsTest {
    @Test
    fun recordAndRetrieveTags() {
       val baseTime = TimeId.now().tag(42)
-      val tracer = newLatencyTracer(
-         created = baseTime,
-         tags = MicroTag4()
-      )
+      val tracer = LatencyTracer(created = baseTime, tags = MicroTag4())
 
       tracer.recordMileStone1(baseTime.add(10.us))
       tracer.recordMileStone2(baseTime.add(25.us))
@@ -43,23 +36,20 @@ class TagsTest {
 
    @Test
    fun tagsRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_LATENCY_TRACER))
+      val buffer = UnsafeBuffer(ByteArray(LatencyTracerCodec.SIZE))
       val baseTime = TimeId.now().tag(77)
 
-      val tracer = newLatencyTracer(
-         created = baseTime,
-         tags = MicroTag4()
-      )
+      val tracer = LatencyTracer(created = baseTime, tags = MicroTag4())
 
       tracer.recordMileStone1(baseTime.add(5.us))
       tracer.recordMileStone2(baseTime.add(10.us))
       tracer.recordMileStone3(baseTime.add(15.us))
       tracer.recordMileStone4(baseTime.add(20.us))
 
-      tracer.encodeTo(buffer)
+      encodeLatencyTracerSBE(tracer, buffer)
 
       val decoded = newLatencyTracer()
-      decoded.decodeFrom(buffer)
+      decodeLatencyTracerSBE(decoded, buffer)
 
       assertEquals(baseTime.add(5.us).ns().nanos, decoded.getTimeMileStone1().ns().nanos)
       assertEquals(baseTime.add(10.us).ns().nanos, decoded.getTimeMileStone2().ns().nanos)
@@ -70,7 +60,7 @@ class TagsTest {
    @Test
    fun printLayout() {
       val baseTime = TimeId.now().tag(99)
-      val tracer = newLatencyTracer(created = baseTime, tags = MicroTag4())
+      val tracer = LatencyTracer(created = baseTime, tags = MicroTag4())
       tracer.recordMileStone1(baseTime.add(10.us))
       tracer.recordMileStone2(baseTime.add(20.us))
       tracer.recordMileStone3(baseTime.add(30.us))

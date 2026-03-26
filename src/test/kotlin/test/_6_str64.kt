@@ -27,33 +27,33 @@ class Str64Test {
 
    @Test
    fun shortSymbolRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE3))
+      val buffer = UnsafeBuffer(ByteArray(Trade3Codec.SIZE))
 
-      Trade3(id = 1L, symbol = TestSymbol1Str64.from("ABC"), timestamp = 2L, price = 3L, amount = 4L)
-         .encodeTo(buffer)
+      val trade = Trade3(id = 1L, symbol = TestSymbol1Str64.from("ABC"), timestamp = 2L, price = 3L, amount = 4L)
+      Trade3Codec.encodeFrom(trade, buffer, 0)
 
       val decoded = newTrade3()
-      decoded.decodeFrom(buffer)
+      Trade3Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals("ABC", decoded.symbol.toString())
    }
 
    @Test
    fun fullCapSymbolRoundtrip() {
-      val buffer = UnsafeBuffer(ByteArray(SBE_SIZE_TRADE3))
+      val buffer = UnsafeBuffer(ByteArray(Trade3Codec.SIZE))
 
-      Trade3(id = 1L, symbol = TestSymbol1Str64.from("XBTUSDTH26"), timestamp = 2L, price = 3L, amount = 4L)
-         .encodeTo(buffer)
+      val trade = Trade3(id = 1L, symbol = TestSymbol1Str64.from("XBTUSDTH26"), timestamp = 2L, price = 3L, amount = 4L)
+      Trade3Codec.encodeFrom(trade, buffer, 0)
 
       val decoded = newTrade3()
-      decoded.decodeFrom(buffer)
+      Trade3Codec.decodeInto(decoded, buffer, 0)
 
       assertEquals("XBTUSDTH26", decoded.symbol.toString())
    }
 
    @Test
    fun flyweightStr64() {
-      val fw = Trade3RW()
+      val fw = Trade3FW()
       fw.symbol(TestSymbol1Str64.from("ETH_USD"))
       assertEquals("ETH_USD", fw.symbol().toString())
    }

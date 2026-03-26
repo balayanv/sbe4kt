@@ -1,245 +1,203 @@
 package sbe4kt.kt
 
-import sbe4kt.ir.Composite
-import sbe4kt.ir.Field
 import sbe4kt.ir.Message
+import sbe4kt.ir.StringN
+import sbe4kt.ir.Struct
+import sbe4kt.ir.ArrayN
+import sbe4kt.ir.Tags
 import sbe4kt.ir.Union
 import sbe4kt.util.indent
-import sbe4kt.util.sbeSizeConstant
 import sbe4kt.util.trimTemplate
 
 internal fun generateFlyweightsSection(message: Message): String {
    val className = message.name
-   val sizeConstName = className.sbeSizeConstant()
+   val codecName = "${className}Codec"
+
+   val hasUnsupportedFields = message.fields.any { !isSupportedCodecType(it.type) }
+   if (hasUnsupportedFields) {
+      return "// ${className}FW skipped: contains unsupported field types (not yet supported)"
+   }
 
    val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
-   val fieldsSbeOrder = message.fields.sortedBy { it.sbeOrder }
-   val compositFields = fieldsDecOrder.filter { it.type is Composite }
-   val nestedMessageFields = fieldsDecOrder.filter { it.type is Message }
-   val unionFields = fieldsDecOrder.filter { it.type is Union }
 
-   val fieldsForFlyweights = fieldsDecOrder.filter { it.type !is Union }
+   // nested FW fields initialized with shared buffer and computed offset
+   val nestedFwFields = mutableListOf<String>()
+   val nestedFwVarNames = mutableListOf<Pair<String, String>>() // varName to typeName
 
-   val fwEncoderBody = fieldsSbeOrder.joinToString("\n") {
-      val encoderParam = if (it.type is Message || it.type is Union) "${className.replaceFirstChar { it.lowercase() }}Encoder" else "encoder"
-      it.type.howToEncodeFromSource(encoderParam, it.name, "source")
+   for (field in fieldsDecOrder) {
+      val fieldCap = field.name.replaceFirstChar { it.uppercase() }
+      when (field.type) {
+         is Struct, is Message -> {
+            nestedFwFields.add("private val ${field.name}FW = ${field.type.name}FW(buffer).offset($codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW" to "${field.type.name}FW")
+         }
+         is ArrayN -> {
+            if (field.type.isStruct) {
+               val structName = field.type.structType.name
+               val elementVar = "${field.name}ElementFW"
+               nestedFwFields.add("private val $elementVar = ${structName}FW(buffer)")
+               nestedFwFields.add("private val ${field.name}FW = ArrayFW<${structName}FW>(${field.type.length}, ${structName}Codec.SIZE, { _, off, _ -> $elementVar.also { it.offset(off) } }, buffer).offset($codecName.offset${fieldCap}(offset))")
+            } else {
+               nestedFwFields.add("private val ${field.name}FW = ${field.type.fwName}(buffer, ${field.type.length}).offset($codecName.offset${fieldCap}(offset))")
+            }
+            nestedFwVarNames.add("${field.name}FW" to field.type.fwName)
+         }
+         is StringN -> {
+            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(buffer, ${field.type.length}).offset($codecName.offset${fieldCap}(offset))")
+            nestedFwVarNames.add("${field.name}FW" to "CharArrayFW")
+         }
+         is Union -> {
+            val union = field.type
+            for (variant in union.allowedTypes) {
+               val variantLower = variant.name.replaceFirstChar { it.lowercase() }
+               nestedFwFields.add("private val ${variantLower}FW = ${variant.name}FW(buffer).offset($codecName.offset${fieldCap}(offset))")
+               nestedFwVarNames.add("${variantLower}FW" to "${variant.name}FW")
+            }
+         }
+         else -> {}
+      }
    }
 
-   val fwDecoderBody = fieldsSbeOrder.joinToString("\n") {
-      val decoderParam = if (it.type is Message || it.type is Union) "${className.replaceFirstChar { it.lowercase() }}Decoder" else "decoder"
-      it.type.howToDecodeIntoTarget(decoderParam, it.name, "target")
+   // field accessors
+   val fwAccessors = fieldsDecOrder.joinToString("\n") { field ->
+      val fieldCap = field.name.replaceFirstChar { it.uppercase() }
+      when (field.type) {
+         is Struct, is Message -> {
+            "fun ${field.name}() = ${field.name}FW"
+         }
+         is Union -> {
+            val union = field.type
+            val lines = mutableListOf<String>()
+            lines.add("fun ${field.name}Id(): Int = $codecName.readTemplateId(buffer, $codecName.offset${fieldCap}(offset))")
+            for (variant in union.allowedTypes) {
+               val variantLower = variant.name.replaceFirstChar { it.lowercase() }
+               val variantCap = variant.name.replaceFirstChar { it.uppercase() }
+               lines.add("fun ${field.name}${variantCap}() = ${variantLower}FW")
+            }
+            val whenBranches = union.allowedTypes.joinToString("\n") { variant ->
+               "   is ${variant.name} -> ${variant.name}Codec.writeFrom(value, buffer, $codecName.offset${fieldCap}(offset))"
+            }
+            val elseClause = if (union.typeName == "Any") {
+               $$"\n   else -> throw IllegalArgumentException(\"Unexpected type in union field '$${field.name}': ${value::class.qualifiedName}\")"
+            } else ""
+            lines.add("fun ${field.name}(value: ${union.typeName}) = apply {\n   when (value) {\n$whenBranches$elseClause\n   }\n}")
+            val getBranches = union.allowedTypes.joinToString("\n") { variant ->
+               val variantLower = variant.name.replaceFirstChar { it.lowercase() }
+               "   ${variant.name}Codec.TEMPLATE_ID -> ${variantLower}FW"
+            }
+            lines.add("fun ${field.name}() = when (${field.name}Id()) {\n$getBranches\n   else -> throw IllegalStateException(\"Unknown templateId in union field '${field.name}'\")\n}")
+            lines.joinToString("\n")
+         }
+         is ArrayN, is StringN -> {
+            "fun ${field.name}() = ${field.name}FW"
+         }
+         is Tags -> {
+            field.type.generateFlyweightAccessors(field.name, codecName)
+         }
+         else -> {
+            val fieldCap = field.name.replaceFirstChar { it.uppercase() }
+            val rawExpr = "$codecName.read${fieldCap}(buffer, offset)"
+            val converted = convertFromSbe(field.type, rawExpr)
+            val convertedSet = convertToSbe(field.type, field.name)
+            "fun ${field.name}() = $converted\n" +
+            "fun ${field.name}(${field.name}: ${field.type.name}) = apply { $codecName.write${fieldCap}(buffer, offset, $convertedSet) }"
+         }
+      }
    }
 
-   val fwSetters = fieldsForFlyweights.joinToString("\n") { "fun ${it.name}(${it.name}: ${it.type.name}) = apply { ${it.type.fwSetter("encoder", it.name)} }" }
-   val fwGetters = fieldsForFlyweights.joinToString("\n") { "fun ${it.name}() = ${it.type.fwGetter("decoder", it.name)}" }
+   val nestedFwSection = if (nestedFwFields.isEmpty()) "" else nestedFwFields.joinToString("\n").indent(3) + "\n"
 
-   // if type uses other complex types expose their generated flyweights
-   val fwFieldFWs = compositFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}RW(encoder.${it.name}(), decoder.${it.name}())" }
-   val fwFieldFwEncoderWraps = compositFields.joinToString("\n") { "encoder.${it.name}()" }
-   val fwFieldFwDecoderWraps = compositFields.joinToString("\n") { "decoder.${it.name}()" }
-   val fwFieldFwGettersRW = compositFields.joinToString("\n") { "fun ${it.name}FW() = ${it.name}FW" }
-
-   // For R (read-only) flyweights
-   val fwFieldFWsR = compositFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}R(decoder.${it.name}())" }
-   val fwFieldFwGettersR = compositFields.joinToString("\n") { "fun ${it.name}FW() = ${it.name}FW" }
-
-   // For W (write-only) flyweights
-   val fwFieldFWsW = compositFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}W(encoder.${it.name}())" }
-   val fwFieldFwGettersW = compositFields.joinToString("\n") { "fun ${it.name}FW() = ${it.name}FW" }
-
-   // union field getters/setters (handled separately because they need className for offset computation)
-   val unionFwGetters = generateUnionFwGetters(unionFields, className)
-   val unionFwSetters = generateUnionFwSetters(unionFields, className)
-
-   // flyweights of nested @SBE types
-   val nestedMessageFWsRW = nestedMessageFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}RW(buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${it.name}EncodingOffset())" }
-   val nestedMessageFWsR = nestedMessageFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}R(buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${it.name}EncodingOffset())" }
-   val nestedMessageFWsW = nestedMessageFields.joinToString("\n") { "private val ${it.name}FW = ${it.type.name}W(buffer, offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${it.name}EncodingOffset())" }
-   val nestedMessageFwGetters = nestedMessageFields.joinToString("\n") { "fun ${it.name}FW() = ${it.name}FW" }
+   val toStringMethod = generateFwToString("${className}FW", nestedFwVarNames)
 
    return """
-      |class ${className}RW(
-      |   var buffer: MutableDirectBuffer = UnsafeBuffer(ByteArray($sizeConstName)),
-      |   var offset: Int = 0
+      |class ${className}FW(
+      |   val buffer: UnsafeBuffer = UnsafeBuffer(ByteArray($codecName.SIZE)),
       |) {
-      |   private val headerEncoder = MessageHeaderEncoder()
-      |   private val encoder = ${className}Encoder()
+      |   private var offset: Int = 0
+      |   fun offset(offset: Int) = apply { this.offset = offset }
+      |${nestedFwSection}
+      |   fun header() = apply { $codecName.writeHeader(buffer, offset) }
+      |   fun blockLength() = $codecName.readBlockLength(buffer, offset)
+      |   fun templateId() = $codecName.readTemplateId(buffer, offset)
+      |   fun schemaId() = $codecName.readSchemaId(buffer, offset)
+      |   fun version() = $codecName.readVersion(buffer, offset)
       |
-      |   private val headerDecoder = MessageHeaderDecoder()
-      |   private val decoder = ${className}Decoder()
-      |
-      |${fwFieldFWs.indent(3)}
-      |
-      |${nestedMessageFWsRW.indent(3)}
-      |
-      |   init {
-      |      prepareBuffer()
-      |   }
-      |
-      |   fun blockLength() = headerDecoder.blockLength()
-      |   fun templateId() = headerDecoder.templateId()
-      |   fun schemaId() = headerDecoder.schemaId()
-      |   fun version() = headerDecoder.version()
-      |
-      |   private fun prepareBuffer() {
-      |      check(buffer.capacity() - offset >= $sizeConstName) { "buffer has not enough capacity for '$className' (need at least : $$sizeConstName, actual : ${'$'}{buffer.capacity()})" }
-      |      encoder.wrapAndApplyHeader(buffer, offset, headerEncoder)
-      |${fwFieldFwEncoderWraps.indent(6)}
-      |      decoder.wrapAndApplyHeader(buffer, offset, headerDecoder)
-      |${fwFieldFwDecoderWraps.indent(6)}
-      |   }
-      |
-      |   fun wrap(buffer: MutableDirectBuffer, offset: Int) = apply {
-      |      this.buffer = buffer
-      |      this.offset = offset
-      |      prepareBuffer()
-      |   }
-      |
-      |
-      |${fwFieldFwGettersRW.indent(3)}
-      |
-      |${nestedMessageFwGetters.indent(3)}
-      |
-      |${fwGetters.indent(3)}
-      |${unionFwGetters.indent(3)}
-      |
-      |${fwSetters.indent(3)}
-      |${unionFwSetters.indent(3)}
+      |${fwAccessors.indent(3)}
       |
       |   fun encodeFrom(source: $className) = apply {
-      |${fwEncoderBody.indent(6)}
+      |      $codecName.writeFrom(source, buffer, offset)
       |   }
       |
-      |   fun decodeInto(target: $className = new$className()) = apply {
-      |${fwDecoderBody.indent(6)}
+      |   fun decodeInto(target: $className) = apply {
+      |      $codecName.readInto(target, buffer, offset)
       |   }
-      |}
+      |   
+      |   fun size() = $codecName.SIZE
       |
-      |class ${className}R(
-      |   var buffer: DirectBuffer = UnsafeBuffer(ByteArray($sizeConstName)),
-      |   var offset: Int = 0
-      |) {
-      |   private val headerDecoder = MessageHeaderDecoder()
-      |   private val decoder = ${className}Decoder()
-      |
-      |${fwFieldFWsR.indent(3)}
-      |
-      |${nestedMessageFWsR.indent(3)}
-      |
-      |   init {
-      |      prepareBuffer()
-      |   }
-      |
-      |   fun blockLength() = headerDecoder.blockLength()
-      |   fun templateId() = headerDecoder.templateId()
-      |   fun schemaId() = headerDecoder.schemaId()
-      |   fun version() = headerDecoder.version()
-      |
-      |   private fun prepareBuffer() {
-      |      check(buffer.capacity() - offset >= $sizeConstName) { "buffer has not enough capacity for '$className' (need at least : $$sizeConstName, actual : ${'$'}{buffer.capacity()})" }
-      |      decoder.wrapAndApplyHeader(buffer, offset, headerDecoder)
-      |   }
-      |
-      |   fun wrap(buffer: DirectBuffer, offset: Int) = apply {
-      |      this.buffer = buffer
-      |      this.offset = offset
-      |      prepareBuffer()
-      |   }
-      |
-      |
-      |${fwFieldFwGettersR.indent(3)}
-      |
-      |${nestedMessageFwGetters.indent(3)}
-      |
-      |${fwGetters.indent(3)}
-      |${unionFwGetters.indent(3)}
-      |
-      |   fun decodeInto(target: $className = new$className()) = apply {
-      |${fwDecoderBody.indent(6)}
-      |   }
-      |}
-      |
-      |
-      |class ${className}W(
-      |   var buffer: MutableDirectBuffer = UnsafeBuffer(ByteArray($sizeConstName)),
-      |   var offset: Int = 0
-      |) {
-      |   private val headerEncoder = MessageHeaderEncoder()
-      |   private val encoder = ${className}Encoder()
-      |
-      |${fwFieldFWsW.indent(3)}
-      |
-      |${nestedMessageFWsW.indent(3)}
-      |
-      |   init {
-      |      prepareBuffer()
-      |   }
-      |
-      |   fun blockLength() = ${className}Encoder.BLOCK_LENGTH
-      |   fun templateId() = ${className}Encoder.TEMPLATE_ID
-      |   fun schemaId() = ${className}Encoder.SCHEMA_ID
-      |   fun version() = ${className}Encoder.SCHEMA_VERSION
-      |
-      |   private fun prepareBuffer() {
-      |      check(buffer.capacity() - offset >= $sizeConstName) { "buffer has not enough capacity for '$className' (need at least : $$sizeConstName, actual : ${'$'}{buffer.capacity()})" }
-      |      encoder.wrapAndApplyHeader(buffer, offset, headerEncoder)
-      |   }
-      |
-      |   fun wrap(buffer: MutableDirectBuffer, offset: Int) = apply {
-      |      this.buffer = buffer
-      |      this.offset = offset
-      |      prepareBuffer()
-      |   }
-      |
-      |
-      |${fwFieldFwGettersW.indent(3)}
-      |
-      |${nestedMessageFwGetters.indent(3)}
-      |
-      |${fwSetters.indent(3)}
-      |${unionFwSetters.indent(3)}
-      |
-      |   fun encodeFrom(source: $className) = apply {
-      |${fwEncoderBody.indent(6)}
-      |   }
+      |${toStringMethod.indent(3)}
       |}
       |""".trimTemplate()
 }
 
-private fun generateUnionFwGetters(unionFields: List<Field>, className: String): String {
-   if (unionFields.isEmpty()) return ""
-   return unionFields.joinToString("\n") { field ->
-      val union = field.type as Union
-      val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${field.name}EncodingOffset()"
-      buildString {
-         appendLine("fun ${field.name}(): ${union.name} {")
-         appendLine("   val ${field.name}Header = MessageHeaderDecoder()")
-         appendLine("   ${field.name}Header.wrap(buffer, $fieldOffset)")
-         appendLine("   return when (${field.name}Header.templateId()) {")
-         for (type in union.allowedTypes) {
-            appendLine("      ${type.name}Encoder.TEMPLATE_ID -> new${type.name}().also { decode${type.name}(it, buffer, $fieldOffset) }")
-         }
-         appendLine("      else -> throw IllegalArgumentException(\"Unknown templateId in union field '${field.name}': \${${field.name}Header.templateId()}\")")
-         appendLine("   }")
-         append("}")
-      }
+// --- composite FW (no header, flat fields) ---
+
+internal fun generateCompositeFWSection(struct: Struct): String {
+   val className = struct.name
+   val codecName = "${className}Codec"
+
+   val hasUnsupportedFields = struct.fields.any { !isSupportedCodecType(it.type) }
+   if (hasUnsupportedFields) {
+      return "// ${className}FW skipped: contains unsupported field types"
    }
+
+   val fieldsDecOrder = struct.fields.sortedBy { it.declarationOrder }
+
+   val fwAccessors = fieldsDecOrder.joinToString("\n") { field ->
+      val fieldCap = field.name.replaceFirstChar { it.uppercase() }
+      val rawExpr = "$codecName.read${fieldCap}(buffer, offset)"
+      val converted = convertFromSbe(field.type, rawExpr)
+      val convertedSet = convertToSbe(field.type, field.name)
+      "fun ${field.name}() = $converted\n" +
+      "fun ${field.name}(${field.name}: ${field.type.name}) = apply { $codecName.write${fieldCap}(buffer, offset, $convertedSet) }"
+   }
+
+   val toStringMethod = generateFwToString("${className}FW", emptyList())
+
+   return """
+      |class ${className}FW(
+      |   val buffer: UnsafeBuffer = UnsafeBuffer(ByteArray($codecName.SIZE)),
+      |) {
+      |   private var offset: Int = 0
+      |   fun offset(offset: Int) = apply { this.offset = offset }
+      |${fwAccessors.indent(3)}
+      |
+      |   fun encodeFrom(source: $className) = apply {
+      |      $codecName.writeFrom(source, buffer, offset)
+      |   }
+      |
+      |   fun decodeInto(target: $className) = apply {
+      |      $codecName.readInto(target, buffer, offset)
+      |   }
+      |
+      |   fun size() = $codecName.SIZE
+      |
+      |${toStringMethod.indent(3)}
+      |}
+      |""".trimTemplate()
 }
 
-private fun generateUnionFwSetters(unionFields: List<Field>, className: String): String {
-   if (unionFields.isEmpty()) return ""
-   return unionFields.joinToString("\n") { field ->
-      val union = field.type as Union
-      val fieldOffset = "offset + MessageHeaderEncoder.ENCODED_LENGTH + ${className}Encoder.${field.name}EncodingOffset()"
-      buildString {
-         appendLine("fun ${field.name}(${field.name}: ${union.name}) = apply {")
-         appendLine("   when (${field.name}) {")
-         for (type in union.allowedTypes) {
-            appendLine("      is ${type.name} -> encode${type.name}(${field.name}, buffer, $fieldOffset)")
-         }
-         appendLine("      else -> throw IllegalArgumentException(\"Unexpected type in union field '${field.name}': \${${field.name}::class.qualifiedName}\")")
-         appendLine("   }")
-         append("}")
-      }
+private fun generateFwToString(fwClassName: String, nestedVarNames: List<Pair<String, String>>): String {
+   val sb = StringBuilder()
+   sb.appendLine("override fun toString(): String = \"\"\"")
+   sb.appendLine("   $fwClassName {")
+   sb.appendLine($$"      buffer -> UnsafeBuffer@${System.identityHashCode(buffer)}[${buffer.capacity()}]")
+   sb.appendLine($$"      offset: $offset")
+   for ((varName, typeName) in nestedVarNames) {
+      sb.appendLine("      $typeName {")
+      sb.appendLine($$"         buffer -> UnsafeBuffer@${System.identityHashCode($$varName.buffer)}[${$$varName.buffer.capacity()}]")
+      sb.appendLine("      }")
    }
+   sb.appendLine("   }")
+   sb.append("\"\"\".trimIndent()")
+   return sb.toString()
 }

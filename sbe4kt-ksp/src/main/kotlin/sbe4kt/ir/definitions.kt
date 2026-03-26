@@ -32,19 +32,8 @@ internal sealed interface IR {
       val packageStr: String
       val imports: Set<String>
 
-      fun encodeField(encoder: String, field: String, value: String) = "$encoder.$field($value)"
-      fun decodeField(decoder: String, field: String) = "$decoder.$field()"
-
       fun convertToSbe(value: String) = value
       fun convertFromSbe(value: String) = value
-
-      fun howToEncodeFromSource(encoder: String, field: String, instance: String) = encodeField(encoder, field, convertToSbe("$instance.$field"))
-      fun howToDecodeIntoTarget(decoder: String, field: String, instance: String) = assignToInstanceField(instance, field, convertFromSbe(decodeField(decoder, field)))
-
-      fun assignToInstanceField(instance: String, field: String, value: String) = "$instance.$field = $value"
-
-      fun fwSetter(encoder: String, field: String) = encodeField(encoder, field, convertToSbe(field))
-      fun fwGetter(decoder: String, field: String): String = convertFromSbe(decodeField(decoder, field))
    }
 }
 
@@ -55,8 +44,7 @@ internal data class Schema(
    val structs: ArrayList<Struct> = ArrayList()
    val messages: ArrayList<Message> = ArrayList()
    val deprecatedMessages: ArrayList<PrevMessage> = ArrayList()
-   val byteArraySizes = HashSet<Int>()
-   val fixedStrings = HashSet<StringN>()
+   val arraySizes = HashSet<Pair<IR.Leaf, Int>>()
    var evolution: SchemaEvolution? = null
 
    val ids = HashSet<Int>()
@@ -124,15 +112,19 @@ internal data class Schema(
 
    private fun extractSpecialTypes(type: IR.Leaf) {
       when (type) {
-         is ByteArrayN -> byteArraySizes.add(type.length)
-         is StringN -> fixedStrings.add(type)
-         is Value -> extractSpecialTypes(type.underlyingType)
-         is Message -> byteArraySizes.add(type.size) // Nested messages use ByteArrayN
-         is Union -> {
-            byteArraySizes.add(type.maxSize)
-            type.allowedTypes.forEach { extractSpecialTypes(it) }
+         is ArrayN -> {
+            if (type.isStruct) arraySizes.add(Int8 to type.size)
+            else arraySizes.add(type.elementType to type.length)
          }
-         else -> {} // primitives, structs don't contain special types to extract
+         is StringN -> arraySizes.add(Char to type.length)
+         is Value -> extractSpecialTypes(type.underlyingType)
+         is Tags -> extractSpecialTypes(type.valueType)
+         is Message -> arraySizes.add(Int8 to type.size)
+         is Union -> {
+            arraySizes.add(Int8 to type.maxSize)
+            type.allowedTypes.forEach { msg -> msg.fields.forEach { extractSpecialTypes(it.type) } }
+         }
+         else -> {}
       }
    }
 
@@ -150,7 +142,6 @@ internal data class Field(
    val name: String = prop.simpleName.asString().requireNotReserveWord()
    val type: IR.Leaf = prop.toLeaf()
    val isNullable: Boolean = prop.type.resolve().isMarkedNullable
-   val tags: List<String> = prop.metaAnnotation().tags()
    val removeAfter: Int = prop.metaAnnotation().removeAfter()
 
    var id: Int = -1
@@ -197,15 +188,34 @@ internal fun KSPropertyDeclaration.toLeaf(): IR.Leaf {
    }
 
    if (size > 0) {
-      if (declaration.qualifiedName() == "kotlin.ByteArray") {
-         require(size > 0) { "ByteArray size must be positive, got $size" }
-         return ByteArrayN(size)
+      val elementKind: IR.Leaf? = when (declaration.qualifiedName()) {
+         "kotlin.ByteArray" -> Int8
+         "kotlin.ShortArray" -> Int16
+         "kotlin.IntArray" -> Int32
+         "kotlin.LongArray" -> Int64
+         "kotlin.FloatArray" -> sbe4kt.ir.Float
+         "kotlin.DoubleArray" -> sbe4kt.ir.Double
+         "kotlin.CharArray" -> sbe4kt.ir.Char
+         else -> null
       }
-      if (declaration.qualifiedName() == "kotlin.String") {
-         require(size > 0) { "String size must be positive, got $size" }
-         val encoding = meta.encoding()
-         return StringN(size, encoding)
+      if (elementKind != null) return ArrayN(size, elementKind)
+
+      if (declaration.qualifiedName() == "kotlin.String" || declaration.qualifiedName() == "kotlin.CharSequence") {
+         return StringN(size)
       }
+      if (declaration.qualifiedName() == "kotlin.Array") {
+         val typeArg = resolvedType.arguments.first().type!!.resolve().declaration
+         val elementType = recursiveResolveLeaf(typeArg)
+         require(elementType is Struct) { "Array<T> with @META(size) only supports struct types" }
+         return ArrayN(size, elementType)
+      }
+   }
+
+   val tags = meta.tags()
+   if (tags.isNotEmpty()) {
+      val resolved = recursiveResolveLeaf(declaration)
+      require(resolved is Value) { "tags field must be a value class, got ${resolved::class.simpleName}" }
+      return Tags(resolved, tags)
    }
 
    return recursiveResolveLeaf(declaration)
