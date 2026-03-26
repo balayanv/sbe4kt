@@ -194,7 +194,6 @@ internal data class Message(
       imports.add("org.agrona.DirectBuffer")
       imports.add("org.agrona.MutableDirectBuffer")
       imports.add("org.agrona.concurrent.UnsafeBuffer")
-      imports.add("java.nio.ByteBuffer")
       imports.add("sbe4kt.lib.CSV")
       imports.add(declaration.importName())
       fields.onEach { imports.addAll(it.type.imports) }

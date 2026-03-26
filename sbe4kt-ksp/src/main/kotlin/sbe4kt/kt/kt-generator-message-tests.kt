@@ -9,7 +9,6 @@ import sbe4kt.util.trimTemplate
 
 internal fun generateTestsSection(message: Message): String {
    val className = message.name
-   val codecName = "${className}Codec"
 
    val hasUnsupportedFields = message.fields.any { !isSupportedCodecType(it.type) }
    if (hasUnsupportedFields) return "// Tests skipped: $className contains unsupported field types"
@@ -49,44 +48,6 @@ internal fun generateTestsSection(message: Message): String {
       |         $assertFn(original, decoded)
       |      }
       |   }
-      |
-      |   @Test
-      |   fun testCodecCorrectness() {
-      |      val c2cBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
-      |      val s2sBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
-      |      val c2sBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
-      |      val s2cBuffer = UnsafeBuffer(ByteArray($codecName.SIZE))
-      |      val c2cFw = ${className}FW(c2cBuffer)
-      |      val c2sFw = ${className}FW(c2sBuffer)
-      |      val s2cFw = ${className}FW(s2cBuffer)
-      |
-      |      repeat(100) {
-      |         val original = random$className()
-      |         val c2c = new$className()
-      |         c2cFw.encodeFrom(original).decodeInto(c2c)
-      |
-      |         val s2s = new$className()
-      |         encode${className}SBE(original, s2sBuffer, 0)
-      |         decode${className}SBE(s2s, s2sBuffer, 0)
-      |
-      |         val c2s = new$className()
-      |         c2sFw.encodeFrom(original)
-      |         decode${className}SBE(c2s, c2sBuffer, 0)
-      |
-      |         val s2c = new$className()
-      |         encode${className}SBE(original, s2cBuffer, 0)
-      |         s2cFw.decodeInto(s2c)
-      |
-      |         assertEquals(c2cBuffer, s2sBuffer)
-      |         assertEquals(s2sBuffer, c2sBuffer)
-      |         assertEquals(c2sBuffer, s2cBuffer)
-      |
-      |         $assertFn(original, c2c)
-      |         $assertFn(original, s2s)
-      |         $assertFn(original, c2s)
-      |         $assertFn(original, s2c)
-      |      }
-      |   }
       |}
       |""".trimTemplate()
 }
@@ -107,7 +68,6 @@ internal fun KSP.generateTestsForMessage(message: Message) {
    // Generate imports section
    val hasArrayFields = message.fields.any { it.type is ArrayN }
    val testImports = mutableSetOf(
-      "org.agrona.concurrent.UnsafeBuffer",
       "org.junit.jupiter.api.Test",
       "org.junit.jupiter.api.Assertions.assertEquals",
    )

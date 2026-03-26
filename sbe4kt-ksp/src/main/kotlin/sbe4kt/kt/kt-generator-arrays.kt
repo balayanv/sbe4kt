@@ -134,9 +134,8 @@ private fun generateArrayFW(elementType: IR.Leaf): String {
          |class $fwName(
          |   val buffer: UnsafeBuffer,
          |   val size: Int,
+         |   val offset: Int = 0,
          |) : CharSequence {
-         |   private var offset: Int = 0
-         |   fun offset(offset: Int) = apply { this.offset = offset }
          |   override fun get(index: Int): kotlin.Char = $codecName.get(buffer, offset, index)
          |   fun set(index: Int, value: kotlin.Char) = apply { $codecName.set(buffer, offset, index, value) }
          |   fun set(index: Int, value: Byte) = apply { $codecName.set(buffer, offset, index, value) }
@@ -175,9 +174,8 @@ private fun generateArrayFW(elementType: IR.Leaf): String {
          |class $fwName(
          |   val buffer: UnsafeBuffer,
          |   val size: Int,
+         |   val offset: Int = 0,
          |) {
-         |   private var offset: Int = 0
-         |   fun offset(offset: Int) = apply { this.offset = offset }
          |   fun get(index: Int): $typeName = $codecName.get(buffer, offset, index)
          |   fun set(index: Int, value: $typeName) = apply { $codecName.set(buffer, offset, index, value) }
          |
@@ -196,9 +194,8 @@ private fun generateGenericArrayFW(): String = """
    |   private val stride: Int,
    |   private val wrapElement: (DirectBuffer, Int, Int) -> T,
    |   val buffer: UnsafeBuffer,
+   |   val offset: Int = 0,
    |) {
-   |   private var offset: Int = 0
-   |   fun offset(offset: Int) = apply { this.offset = offset }
    |   operator fun get(index: Int): T {
    |      if (index !in 0..<count) throw IndexOutOfBoundsException("index ${'$'}index out of bounds for array[${'$'}count]")
    |      return wrapElement(buffer, offset + index * stride, stride)

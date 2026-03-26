@@ -28,7 +28,7 @@ internal fun generateFlyweightsSection(message: Message): String {
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
          is Struct, is Message -> {
-            nestedFwFields.add("private val ${field.name}FW = ${field.type.name}FW(buffer).offset($codecName.offset${fieldCap}(offset))")
+            nestedFwFields.add("private val ${field.name}FW = ${field.type.name}FW(buffer, $codecName.offset${fieldCap}(offset))")
             nestedFwVarNames.add("${field.name}FW" to "${field.type.name}FW")
          }
          is ArrayN -> {
@@ -36,21 +36,21 @@ internal fun generateFlyweightsSection(message: Message): String {
                val structName = field.type.structType.name
                val elementVar = "${field.name}ElementFW"
                nestedFwFields.add("private val $elementVar = ${structName}FW(buffer)")
-               nestedFwFields.add("private val ${field.name}FW = ArrayFW<${structName}FW>(${field.type.length}, ${structName}Codec.SIZE, { _, off, _ -> $elementVar.also { it.offset(off) } }, buffer).offset($codecName.offset${fieldCap}(offset))")
+               nestedFwFields.add("private val ${field.name}FW = ArrayFW<${structName}FW>(${field.type.length}, ${structName}Codec.SIZE, { _, off, _ -> $elementVar.also { it.offset(off) } }, buffer, $codecName.offset${fieldCap}(offset))")
             } else {
-               nestedFwFields.add("private val ${field.name}FW = ${field.type.fwName}(buffer, ${field.type.length}).offset($codecName.offset${fieldCap}(offset))")
+               nestedFwFields.add("private val ${field.name}FW = ${field.type.fwName}(buffer, ${field.type.length}, $codecName.offset${fieldCap}(offset))")
             }
             nestedFwVarNames.add("${field.name}FW" to field.type.fwName)
          }
          is StringN -> {
-            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(buffer, ${field.type.length}).offset($codecName.offset${fieldCap}(offset))")
+            nestedFwFields.add("private val ${field.name}FW = CharArrayFW(buffer, ${field.type.length}, $codecName.offset${fieldCap}(offset))")
             nestedFwVarNames.add("${field.name}FW" to "CharArrayFW")
          }
          is Union -> {
             val union = field.type
             for (variant in union.allowedTypes) {
                val variantLower = variant.name.replaceFirstChar { it.lowercase() }
-               nestedFwFields.add("private val ${variantLower}FW = ${variant.name}FW(buffer).offset($codecName.offset${fieldCap}(offset))")
+               nestedFwFields.add("private val ${variantLower}FW = ${variant.name}FW(buffer, $codecName.offset${fieldCap}(offset))")
                nestedFwVarNames.add("${variantLower}FW" to "${variant.name}FW")
             }
          }
@@ -63,16 +63,16 @@ internal fun generateFlyweightsSection(message: Message): String {
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
          is Struct, is Message -> {
-            "fun ${field.name}() = ${field.name}FW"
+            "fun read${fieldCap}() = ${field.name}FW"
          }
          is Union -> {
             val union = field.type
             val lines = mutableListOf<String>()
-            lines.add("fun ${field.name}Id(): Int = $codecName.readTemplateId(buffer, $codecName.offset${fieldCap}(offset))")
+            lines.add("fun read${fieldCap}Id(): Int = $codecName.readTemplateId(buffer, $codecName.offset${fieldCap}(offset))")
             for (variant in union.allowedTypes) {
                val variantLower = variant.name.replaceFirstChar { it.lowercase() }
                val variantCap = variant.name.replaceFirstChar { it.uppercase() }
-               lines.add("fun ${field.name}${variantCap}() = ${variantLower}FW")
+               lines.add("fun read${fieldCap}${variantCap}() = ${variantLower}FW")
             }
             val whenBranches = union.allowedTypes.joinToString("\n") { variant ->
                "   is ${variant.name} -> ${variant.name}Codec.writeFrom(value, buffer, $codecName.offset${fieldCap}(offset))"
@@ -80,27 +80,26 @@ internal fun generateFlyweightsSection(message: Message): String {
             val elseClause = if (union.typeName == "Any") {
                $$"\n   else -> throw IllegalArgumentException(\"Unexpected type in union field '$${field.name}': ${value::class.qualifiedName}\")"
             } else ""
-            lines.add("fun ${field.name}(value: ${union.typeName}) = apply {\n   when (value) {\n$whenBranches$elseClause\n   }\n}")
+            lines.add("fun write${fieldCap}(value: ${union.typeName}) = apply {\n   when (value) {\n$whenBranches$elseClause\n   }\n}")
             val getBranches = union.allowedTypes.joinToString("\n") { variant ->
                val variantLower = variant.name.replaceFirstChar { it.lowercase() }
                "   ${variant.name}Codec.TEMPLATE_ID -> ${variantLower}FW"
             }
-            lines.add("fun ${field.name}() = when (${field.name}Id()) {\n$getBranches\n   else -> throw IllegalStateException(\"Unknown templateId in union field '${field.name}'\")\n}")
+            lines.add("fun read${fieldCap}() = when (read${fieldCap}Id()) {\n$getBranches\n   else -> throw IllegalStateException(\"Unknown templateId in union field '${field.name}'\")\n}")
             lines.joinToString("\n")
          }
          is ArrayN, is StringN -> {
-            "fun ${field.name}() = ${field.name}FW"
+            "fun read${fieldCap}() = ${field.name}FW"
          }
          is Tags -> {
             field.type.generateFlyweightAccessors(field.name, codecName)
          }
          else -> {
-            val fieldCap = field.name.replaceFirstChar { it.uppercase() }
             val rawExpr = "$codecName.read${fieldCap}(buffer, offset)"
             val converted = convertFromSbe(field.type, rawExpr)
             val convertedSet = convertToSbe(field.type, field.name)
-            "fun ${field.name}() = $converted\n" +
-            "fun ${field.name}(${field.name}: ${field.type.name}) = apply { $codecName.write${fieldCap}(buffer, offset, $convertedSet) }"
+            "fun read${fieldCap}() = $converted\n" +
+            "fun write${fieldCap}(${field.name}: ${field.type.name}) = apply { $codecName.write${fieldCap}(buffer, offset, $convertedSet) }"
          }
       }
    }
@@ -112,9 +111,8 @@ internal fun generateFlyweightsSection(message: Message): String {
    return """
       |class ${className}FW(
       |   val buffer: UnsafeBuffer = UnsafeBuffer(ByteArray($codecName.SIZE)),
+      |   val offset: Int = 0,
       |) {
-      |   private var offset: Int = 0
-      |   fun offset(offset: Int) = apply { this.offset = offset }
       |${nestedFwSection}
       |   fun header() = apply { $codecName.writeHeader(buffer, offset) }
       |   fun blockLength() = $codecName.readBlockLength(buffer, offset)
@@ -166,9 +164,8 @@ internal fun generateCompositeFWSection(struct: Struct): String {
    return """
       |class ${className}FW(
       |   val buffer: UnsafeBuffer = UnsafeBuffer(ByteArray($codecName.SIZE)),
+      |   val offset: Int = 0,
       |) {
-      |   private var offset: Int = 0
-      |   fun offset(offset: Int) = apply { this.offset = offset }
       |${fwAccessors.indent(3)}
       |
       |   fun encodeFrom(source: $className) = apply {
