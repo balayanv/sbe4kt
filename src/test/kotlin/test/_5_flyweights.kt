@@ -19,16 +19,16 @@ class FlyweightsTest {
    @Test
    fun rwDirectSetAndGet() {
       val fw = Trade2FW()
-      fw.header().id(1111L).symbol(42).timestamp(2222L).price(3333L).amount(4444L)
+      fw.writeHeader().writeId(1111L).writeSymbol(42).writeTimestamp(2222L).writePrice(3333L).writeAmount(4444L)
 
-      assertEquals(1111L, fw.id())
-      assertEquals(42, fw.symbol())
-      assertEquals(2222L, fw.timestamp())
-      assertEquals(3333L, fw.price())
-      assertEquals(4444L, fw.amount())
+      assertEquals(1111L, fw.readId())
+      assertEquals(42, fw.readSymbol())
+      assertEquals(2222L, fw.readTimestamp())
+      assertEquals(3333L, fw.readPrice())
+      assertEquals(4444L, fw.readAmount())
 
       val temp = newTrade2()
-      fw.decodeInto(target = temp)
+      fw.decode(target = temp)
 
       temp.printSbeLayout()
    }
@@ -37,14 +37,14 @@ class FlyweightsTest {
    fun writeOnlyThenReadOnly() {
       val buffer = UnsafeBuffer(ByteArray(Trade2Codec.SIZE))
 
-      Trade2FW(buffer).id(100L).symbol(200).timestamp(300L).price(400L).amount(500L)
+      Trade2FW(buffer).writeId(100L).writeSymbol(200).writeTimestamp(300L).writePrice(400L).writeAmount(500L)
 
       val r = Trade2FW(buffer)
-      assertEquals(100L, r.id())
-      assertEquals(200, r.symbol())
-      assertEquals(300L, r.timestamp())
-      assertEquals(400L, r.price())
-      assertEquals(500L, r.amount())
+      assertEquals(100L, r.readId())
+      assertEquals(200, r.readSymbol())
+      assertEquals(300L, r.readTimestamp())
+      assertEquals(400L, r.readPrice())
+      assertEquals(500L, r.readAmount())
    }
 
    @Test
@@ -52,16 +52,16 @@ class FlyweightsTest {
       val data = ByteArray(Trade2Codec.SIZE * 2)
       val fw = Trade2FW()
       fw.buffer.wrap(data, 0, Trade2Codec.SIZE)
-      fw.id(1L)
+      fw.writeId(1L)
 
       fw.buffer.wrap(data, Trade2Codec.SIZE, Trade2Codec.SIZE)
-      fw.id(2L)
+      fw.writeId(2L)
 
       val r = Trade2FW()
       r.buffer.wrap(data, 0, Trade2Codec.SIZE)
-      assertEquals(1L, r.id())
+      assertEquals(1L, r.readId())
 
       r.buffer.wrap(data, Trade2Codec.SIZE, Trade2Codec.SIZE)
-      assertEquals(2L, r.id())
+      assertEquals(2L, r.readId())
    }
 }

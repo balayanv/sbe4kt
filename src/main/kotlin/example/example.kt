@@ -20,10 +20,10 @@ fun main() {
    val buf = UnsafeBuffer(ByteArray(MsgCodec.SIZE))
    val fw = MsgFW()
    fw.buffer.wrap(buf)
-   fw.payload()
+   fw.payload().decode()
 
-   fw.encodeFrom(source)
-   fw.decodeInto(target)
+   fw.encode(source)
+   fw.decode(target)
    target.printSbeLayout(verbose = true)
 
    println(fw.toString())

@@ -32,11 +32,12 @@ internal fun KSP.generateCodecSection(message: Message): String {
       |const val PACKED_HEADER = (BLOCK_LENGTH.toLong() and 0xFFFF) or ((TEMPLATE_ID.toLong() and 0xFFFF) shl 16) or ((SCHEMA_ID.toLong() and 0xFFFF) shl 32) or ((SCHEMA_VERSION.toLong() and 0xFFFF) shl 48)""".trimTemplate()
 
    val headerMethods = """
+      |fun writeHeader(buffer: MutableDirectBuffer, offset: Int = 0): Int { buffer.putLong(offset, PACKED_HEADER); return HEADER_SIZE }
+      |fun readHeader(buffer: DirectBuffer, offset: Int = 0): Long = buffer.getLong(offset)
       |fun readBlockLength(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset).toInt() and 0xFFFF
       |fun readTemplateId(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 2).toInt() and 0xFFFF
       |fun readSchemaId(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 4).toInt() and 0xFFFF
-      |fun readVersion(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 6).toInt() and 0xFFFF
-      |fun writeHeader(buffer: MutableDirectBuffer, offset: Int = 0): Int { buffer.putLong(offset, PACKED_HEADER); return HEADER_SIZE }""".trimTemplate()
+      |fun readVersion(buffer: DirectBuffer, offset: Int = 0): Int = buffer.getShort(offset + 6).toInt() and 0xFFFF""".trimTemplate()
 
    val encodePrefix = "writeHeader(buffer, offset)"
    val decodePrefix = "val tid = readTemplateId(buffer, offset)\n" +
@@ -95,11 +96,11 @@ private fun generateCodecObject(
    val fieldAccessors = simpleFields.joinToString("\n\n") { field ->
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       val sbeType = sbeKotlinType(field.type)
-      "fun read${fieldCap}(buffer: DirectBuffer, offset: Int = 0): $sbeType = ${
-         sbeGet(field.type, "offset${fieldCap}(offset)")
-      }\n" + "fun write${fieldCap}(buffer: MutableDirectBuffer, offset: Int = 0, value: $sbeType): Int { ${
+      "fun write${fieldCap}(buffer: MutableDirectBuffer, offset: Int = 0, value: $sbeType): Int { ${
          sbePut(field.type, "offset${fieldCap}(offset)", "value")
-      }; return ${field.type.size} }"
+      }; return ${field.type.size} }\n" + "fun read${fieldCap}(buffer: DirectBuffer, offset: Int = 0): $sbeType = ${
+         sbeGet(field.type, "offset${fieldCap}(offset)")
+      }"
    }
 
    val encodeBody = fieldsSbeOrder.joinToString("\n") { field ->

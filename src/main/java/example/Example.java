@@ -14,8 +14,8 @@ public class Example {
             var random = MsgExtensionsKt.randomMsg();
             var target = MsgExtensionsKt.newMsg();
 
-            fw.encodeFrom(random);
-            fw.decodeInto(target);
+            fw.encode(random);
+            fw.decode(target);
 
             assert random.equals(target) : "Mismatch at iteration " + i;
         }

@@ -63,16 +63,16 @@ internal fun generateFlyweightsSection(message: Message): String {
       val fieldCap = field.name.replaceFirstChar { it.uppercase() }
       when (field.type) {
          is Struct, is Message -> {
-            "fun read${fieldCap}() = ${field.name}FW"
+            "fun ${field.name}() = ${field.name}FW"
          }
          is Union -> {
             val union = field.type
             val lines = mutableListOf<String>()
-            lines.add("fun read${fieldCap}Id(): Int = $codecName.readTemplateId(buffer, $codecName.offset${fieldCap}(offset))")
+            lines.add("fun ${field.name}Id(): Int = $codecName.readTemplateId(buffer, $codecName.offset${fieldCap}(offset))")
             for (variant in union.allowedTypes) {
                val variantLower = variant.name.replaceFirstChar { it.lowercase() }
                val variantCap = variant.name.replaceFirstChar { it.uppercase() }
-               lines.add("fun read${fieldCap}${variantCap}() = ${variantLower}FW")
+               lines.add("fun ${field.name}${variantCap}() = ${variantLower}FW")
             }
             val whenBranches = union.allowedTypes.joinToString("\n") { variant ->
                "   is ${variant.name} -> ${variant.name}Codec.writeFrom(value, buffer, $codecName.offset${fieldCap}(offset))"
@@ -85,11 +85,11 @@ internal fun generateFlyweightsSection(message: Message): String {
                val variantLower = variant.name.replaceFirstChar { it.lowercase() }
                "   ${variant.name}Codec.TEMPLATE_ID -> ${variantLower}FW"
             }
-            lines.add("fun read${fieldCap}() = when (read${fieldCap}Id()) {\n$getBranches\n   else -> throw IllegalStateException(\"Unknown templateId in union field '${field.name}'\")\n}")
+            lines.add("fun ${field.name}() = when (${field.name}Id()) {\n$getBranches\n   else -> throw IllegalStateException(\"Unknown templateId in union field '${field.name}'\")\n}")
             lines.joinToString("\n")
          }
          is ArrayN, is StringN -> {
-            "fun read${fieldCap}() = ${field.name}FW"
+            "fun ${field.name}() = ${field.name}FW"
          }
          is Tags -> {
             field.type.generateFlyweightAccessors(field.name, codecName)
@@ -98,8 +98,8 @@ internal fun generateFlyweightsSection(message: Message): String {
             val rawExpr = "$codecName.read${fieldCap}(buffer, offset)"
             val converted = convertFromSbe(field.type, rawExpr)
             val convertedSet = convertToSbe(field.type, field.name)
-            "fun read${fieldCap}() = $converted\n" +
-            "fun write${fieldCap}(${field.name}: ${field.type.name}) = apply { $codecName.write${fieldCap}(buffer, offset, $convertedSet) }"
+            "fun write${fieldCap}(${field.name}: ${field.type.name}) = apply { $codecName.write${fieldCap}(buffer, offset, $convertedSet) }\n" +
+            "fun read${fieldCap}() = $converted"
          }
       }
    }
@@ -114,22 +114,23 @@ internal fun generateFlyweightsSection(message: Message): String {
       |   val offset: Int = 0,
       |) {
       |${nestedFwSection}
-      |   fun header() = apply { $codecName.writeHeader(buffer, offset) }
-      |   fun blockLength() = $codecName.readBlockLength(buffer, offset)
-      |   fun templateId() = $codecName.readTemplateId(buffer, offset)
-      |   fun schemaId() = $codecName.readSchemaId(buffer, offset)
-      |   fun version() = $codecName.readVersion(buffer, offset)
+      |   fun writeHeader() = apply { $codecName.writeHeader(buffer, offset) }
+      |   fun readHeader() = $codecName.readHeader(buffer, offset)
+      |   fun readBlockLength() = $codecName.readBlockLength(buffer, offset)
+      |   fun readTemplateId() = $codecName.readTemplateId(buffer, offset)
+      |   fun readSchemaId() = $codecName.readSchemaId(buffer, offset)
+      |   fun readVersion() = $codecName.readVersion(buffer, offset)
       |
       |${fwAccessors.indent(3)}
       |
-      |   fun encodeFrom(source: $className) = apply {
-      |      $codecName.writeFrom(source, buffer, offset)
+      |   fun encode(from: $className) = apply {
+      |      $codecName.writeFrom(from, buffer, offset)
       |   }
       |
-      |   fun decodeInto(target: $className) = apply {
+      |   fun decode(target: $className = new$className()) = apply {
       |      $codecName.readInto(target, buffer, offset)
       |   }
-      |   
+      |
       |   fun size() = $codecName.SIZE
       |
       |${toStringMethod.indent(3)}
@@ -155,8 +156,8 @@ internal fun generateCompositeFWSection(struct: Struct): String {
       val rawExpr = "$codecName.read${fieldCap}(buffer, offset)"
       val converted = convertFromSbe(field.type, rawExpr)
       val convertedSet = convertToSbe(field.type, field.name)
-      "fun ${field.name}() = $converted\n" +
-      "fun ${field.name}(${field.name}: ${field.type.name}) = apply { $codecName.write${fieldCap}(buffer, offset, $convertedSet) }"
+      "fun write${fieldCap}(${field.name}: ${field.type.name}) = apply { $codecName.write${fieldCap}(buffer, offset, $convertedSet) }\n" +
+      "fun read${fieldCap}() = $converted"
    }
 
    val toStringMethod = generateFwToString("${className}FW", emptyList())
@@ -168,11 +169,11 @@ internal fun generateCompositeFWSection(struct: Struct): String {
       |) {
       |${fwAccessors.indent(3)}
       |
-      |   fun encodeFrom(source: $className) = apply {
-      |      $codecName.writeFrom(source, buffer, offset)
+      |   fun encode(from: $className) = apply {
+      |      $codecName.writeFrom(from, buffer, offset)
       |   }
       |
-      |   fun decodeInto(target: $className) = apply {
+      |   fun decode(target: $className = new$className()) = apply {
       |      $codecName.readInto(target, buffer, offset)
       |   }
       |

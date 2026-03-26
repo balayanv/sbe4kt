@@ -26,12 +26,12 @@ public class FixedMessageBenchmark {
 
       final UnsafeBuffer sbe4ktEncodeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(1024));
       final UnsafeBuffer sbe4ktDecodeBuffer = new UnsafeBuffer(ByteBuffer.allocateDirect(1024));
-      final FixedMessageFW fwE = new FixedMessageFW(sbe4ktEncodeBuffer).offset(bufferIndex);
-      final FixedMessageFW fwD = new FixedMessageFW(sbe4ktDecodeBuffer).offset(bufferIndex);
+      final FixedMessageFW fwE = new FixedMessageFW(sbe4ktEncodeBuffer, bufferIndex);
+      final FixedMessageFW fwD = new FixedMessageFW(sbe4ktDecodeBuffer, bufferIndex);
 
       {
          encodeSbe(sbeHeaderEncoder, sbeEncoder, sbeDecodeBuffer, bufferIndex);
-         encodeSbe4kt(fwD, sbe4ktDecodeBuffer, bufferIndex);
+         encodeSbe4kt(fwE);
       }
    }
 
@@ -51,14 +51,14 @@ public class FixedMessageBenchmark {
    @Benchmark
    @BenchmarkMode(Mode.AverageTime)
    public int testSbe4ktEncode(final MyState state) {
-      encodeSbe4kt(state.fwE, state.sbe4ktEncodeBuffer, state.bufferIndex);
+      encodeSbe4kt(state.fwE);
       return FixedMessageCodec.SIZE;
    }
 
    @Benchmark
    @BenchmarkMode(Mode.AverageTime)
    public long testSbe4ktDecode(final MyState state) {
-      return decodeSbe4kt(state.fwD, state.sbe4ktDecodeBuffer, state.bufferIndex);
+      return decodeSbe4kt(state.fwD);
    }
 
    static void encodeSbe(
@@ -155,90 +155,85 @@ public class FixedMessageBenchmark {
       return hash;
    }
 
-   static void encodeSbe4kt(final FixedMessageFW fw, UnsafeBuffer buffer, int offset) {
-      fw.getBuffer().wrap(buffer);
-      fw.offset(offset);
-      fw.header();
+   static void encodeSbe4kt(final FixedMessageFW fw) {
+      fw.writeHeader();
 
-      fw.counters().c0(100).c1(200).c2(300).c3(400);
-      fw.timestamp().seconds(1709913600L).nanoseconds(500_000_000);
-      fw.price().mantissa(123456789L).exponent((byte) -4);
+      fw.counters().writeC0(100).writeC1(200).writeC2(300).writeC3(400);
+      fw.timestamp().writeSeconds(1709913600L).writeNanoseconds(500_000_000);
+      fw.price().writeMantissa(123456789L).writeExponent((byte) -4);
 
-      fw.fieldLong1(1_000_000_000L);
-      fw.fieldLong2(-999_999_999L);
-      fw.fieldDouble(2.718281828);
+      fw.writeFieldLong1(1_000_000_000L);
+      fw.writeFieldLong2(-999_999_999L);
+      fw.writeFieldDouble(2.718281828);
 
-      fw.coordinates().latitude(51.5074f).longitude(-0.1278f);
-      fw.identifier().code(987654).region((short) 42).source((byte) 1);
+      fw.coordinates().writeLatitude(51.5074f).writeLongitude(-0.1278f);
+      fw.identifier().writeCode(987654).writeRegion((short) 42).writeSource((byte) 1);
 
-      fw.fieldLong3(777_777_777L);
-      fw.dimensions().length((short) 1500).width((short) 800).height((short) 600);
+      fw.writeFieldLong3(777_777_777L);
+      fw.dimensions().writeLength((short) 1500).writeWidth((short) 800).writeHeight((short) 600);
 
-      fw.fieldInt1(-50_000);
-      fw.fieldInt2(100_000);
-      fw.fieldFloat(3.14f);
-      fw.fieldShort1((short) 1024);
-      fw.fieldShort2((short) -512);
-      fw.fieldByte1((byte) 42);
-      fw.fieldByte2((byte) -7);
-      fw.fieldChar('Z');
-      fw.status(Status.ACTIVE);
+      fw.writeFieldInt1(-50_000);
+      fw.writeFieldInt2(100_000);
+      fw.writeFieldFloat(3.14f);
+      fw.writeFieldShort1((short) 1024);
+      fw.writeFieldShort2((short) -512);
+      fw.writeFieldByte1((byte) 42);
+      fw.writeFieldByte2((byte) -7);
+      fw.writeFieldChar('Z');
+      fw.writeStatus(Status.ACTIVE);
    }
 
-   static long decodeSbe4kt(final FixedMessageFW fw, UnsafeBuffer buffer, int offset) {
-      fw.getBuffer().wrap(buffer);
-      fw.offset(offset);
-
+   static long decodeSbe4kt(final FixedMessageFW fw) {
       long hash = 0;
 
-      hash += fw.blockLength();
-      hash += fw.templateId();
-      hash += fw.schemaId();
-      hash += fw.version();
+      hash += fw.readBlockLength();
+      hash += fw.readTemplateId();
+      hash += fw.readSchemaId();
+      hash += fw.readVersion();
 
       final CountersFW counters = fw.counters();
-      hash += counters.c0();
-      hash += counters.c1();
-      hash += counters.c2();
-      hash += counters.c3();
+      hash += counters.readC0();
+      hash += counters.readC1();
+      hash += counters.readC2();
+      hash += counters.readC3();
 
       final HiResTimestampFW timestamp = fw.timestamp();
-      hash += timestamp.seconds();
-      hash += timestamp.nanoseconds();
+      hash += timestamp.readSeconds();
+      hash += timestamp.readNanoseconds();
 
       final DecimalPriceFW price = fw.price();
-      hash += price.mantissa();
-      hash += price.exponent();
+      hash += price.readMantissa();
+      hash += price.readExponent();
 
-      hash += fw.fieldLong1();
-      hash += fw.fieldLong2();
-      hash += Double.doubleToRawLongBits(fw.fieldDouble());
+      hash += fw.readFieldLong1();
+      hash += fw.readFieldLong2();
+      hash += Double.doubleToRawLongBits(fw.readFieldDouble());
 
       final CoordinatesFW coordinates = fw.coordinates();
-      hash += Float.floatToRawIntBits(coordinates.latitude());
-      hash += Float.floatToRawIntBits(coordinates.longitude());
+      hash += Float.floatToRawIntBits(coordinates.readLatitude());
+      hash += Float.floatToRawIntBits(coordinates.readLongitude());
 
       final IdentifierFW identifier = fw.identifier();
-      hash += identifier.code();
-      hash += identifier.region();
-      hash += identifier.source();
+      hash += identifier.readCode();
+      hash += identifier.readRegion();
+      hash += identifier.readSource();
 
-      hash += fw.fieldLong3();
+      hash += fw.readFieldLong3();
 
       final DimensionsFW dimensions = fw.dimensions();
-      hash += dimensions.length();
-      hash += dimensions.width();
-      hash += dimensions.height();
+      hash += dimensions.readLength();
+      hash += dimensions.readWidth();
+      hash += dimensions.readHeight();
 
-      hash += fw.fieldInt1();
-      hash += fw.fieldInt2();
-      hash += Float.floatToRawIntBits(fw.fieldFloat());
-      hash += fw.fieldShort1();
-      hash += fw.fieldShort2();
-      hash += fw.fieldByte1();
-      hash += fw.fieldByte2();
-      hash += fw.fieldChar();
-      hash += fw.status().ordinal();
+      hash += fw.readFieldInt1();
+      hash += fw.readFieldInt2();
+      hash += Float.floatToRawIntBits(fw.readFieldFloat());
+      hash += fw.readFieldShort1();
+      hash += fw.readFieldShort2();
+      hash += fw.readFieldByte1();
+      hash += fw.readFieldByte2();
+      hash += fw.readFieldChar();
+      hash += fw.readStatus().ordinal();
 
       return hash;
    }

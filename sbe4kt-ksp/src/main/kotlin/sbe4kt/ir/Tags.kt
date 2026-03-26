@@ -26,21 +26,23 @@ internal data class Tags(
    override fun convertFromSbe(value: String) = valueType.convertFromSbe(value)
 
    fun generateFlyweightAccessors(fieldName: String, codecName: String): String {
-      val rawExpr = "$codecName.$fieldName(buffer, offset)"
+      val fieldCap = fieldName.replaceFirstChar { it.uppercase() }
+      val rawExpr = "$codecName.read${fieldCap}(buffer, offset)"
       val lines = mutableListOf<String>()
-      lines.add("fun $fieldName() = ${convertFromSbe(rawExpr)}")
-      lines.add("fun $fieldName($fieldName: $name) = apply { $codecName.$fieldName(buffer, offset, ${convertToSbe(fieldName)}) }")
+      lines.add("fun write${fieldCap}($fieldName: $name) = apply { $codecName.write${fieldCap}(buffer, offset, ${convertToSbe(fieldName)}) }")
+      lines.add("fun read${fieldCap}() = ${convertFromSbe(rawExpr)}")
 
+      val anchorCap = anchor.replaceFirstChar { it.uppercase() }
       for ((i, tag) in milestones.withIndex()) {
          val slot = i + 1
-         val prevExpr = if (i == 0) "$anchor().us()" else "getTime${milestones[i - 1]}().us()"
-         lines.add("fun record$tag(time: TimeId) = apply { $fieldName(${fieldName}().set$slot(time.us() - $prevExpr)) }")
+         val prevExpr = if (i == 0) "read${anchorCap}().us()" else "readTime${milestones[i - 1]}().us()"
+         lines.add("fun record$tag(time: TimeId) = apply { write${fieldCap}(read${fieldCap}().set$slot(time.us() - $prevExpr)) }")
       }
 
       for ((i, tag) in milestones.withIndex()) {
          val slot = i + 1
-         val prevExpr = if (i == 0) "$anchor()" else "getTime${milestones[i - 1]}()"
-         lines.add("fun getTime$tag() = $prevExpr.add(${fieldName}().get$slot())")
+         val prevExpr = if (i == 0) "read${anchorCap}()" else "readTime${milestones[i - 1]}()"
+         lines.add("fun readTime$tag() = $prevExpr.add(read${fieldCap}().get$slot())")
       }
 
       return lines.joinToString("\n")

@@ -40,10 +40,10 @@ internal fun generateTestsSection(message: Message): String {
       |      val fw = ${className}FW()
       |      repeat(100) {
       |         val original = random$className()
-      |         fw.encodeFrom(original)
+      |         fw.encode(original)
       |
       |         val decoded = new$className()
-      |         fw.decodeInto(decoded)
+      |         fw.decode(decoded)
       |
       |         $assertFn(original, decoded)
       |      }

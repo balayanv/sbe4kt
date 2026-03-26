@@ -52,13 +52,13 @@ class NestedMessageTest {
       val buffer = UnsafeBuffer(ByteArray(Signal2Codec.SIZE))
       val fw = Signal2FW(buffer)
 
-      fw.direction(Direction2.BUY)
+      fw.writeDirection(Direction2.BUY)
       fw.xy()
-         .time(TimeId(Nanos(7777000000L)))
-         .price(FPD.fromExact("55.55"))
+         .writeTime(TimeId(Nanos(7777000000L)))
+         .writePrice(FPD.fromExact("55.55"))
 
-      assertEquals(Direction2.BUY, fw.direction())
-      assertEquals(TimeId(Nanos(7777000000L)), fw.xy().time())
-      assertEquals(FPD.fromExact("55.55"), fw.xy().price())
+      assertEquals(Direction2.BUY, fw.readDirection())
+      assertEquals(TimeId(Nanos(7777000000L)), fw.xy().readTime())
+      assertEquals(FPD.fromExact("55.55"), fw.xy().readPrice())
    }
 }

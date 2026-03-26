@@ -7,16 +7,23 @@ internal fun generateEncodersSection(message: Message): String {
    val className = message.name
    val fieldsDecOrder = message.fields.sortedBy { it.declarationOrder }
 
-   val defaultArgs = fieldsDecOrder.joinToString(",\n") { "   ${it.name} = ${it.type.defaultValue}" }
-   val randomArgs = fieldsDecOrder.joinToString(",\n") { "   ${it.name} = ${it.type.randomValue}" }
+   val defaultParams = fieldsDecOrder.joinToString(",\n") { "   ${it.name}: ${it.type.name} = ${it.type.defaultValue}" }
+   val randomParams = fieldsDecOrder.joinToString(",\n") { "   ${it.name}: ${it.type.name} = ${it.type.randomValue}" }
+   val args = fieldsDecOrder.joinToString(", ") { it.name }
 
    return """
-      |fun new$className() = $className(
-      |$defaultArgs
-      |)
+      |@JvmOverloads
+      |fun new$className(
+      |$defaultParams
+      |): $className {
+      |   return $className($args)
+      |}
       |
-      |fun random$className() = $className(
-      |$randomArgs
-      |)
+      |@JvmOverloads
+      |fun random$className(
+      |$randomParams
+      |): $className {
+      |   return $className($args)
+      |}
       |""".trimTemplate()
 }
